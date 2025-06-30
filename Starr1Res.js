@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Modified
 // @namespace     http://tampermonkey.net/
-// @version       3.2 // Prompt optimized for performance & restored PI detection
+// @version       3.4 // Prompt optimized for performance & restored PI detection
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key. Cone ID access, animated UI, notifications & dark mode.
 // @match         *://*/*
-// @downloadURL   https://raw.githubusercontent.com/Charlie-Starr/starr-modified-script/main/STARRMAIN-user.js
-// @updateURL     https://raw.githubusercontent.com/Charlie-Starr/starr-modified-script/main/STARRMAIN-user.js
+// @downloadURL   https://github.com/Charlie-Starr/starr-deepseek_modified-script/raw/refs/heads/main/Starr1Res.js
+// @updateURL     https://github.com/Charlie-Starr/starr-deepseek_modified-script/raw/refs/heads/main/Starr1Res.js
 // @grant         GM_setValue
 // @grant         GM_getValue
 // @grant         GM_notification
@@ -34,7 +34,7 @@
     // Your GitHub Gist URL for authorized CONE IDs
     // Starr will check this list to verify access.
     // UPDATED GIST URL as per request
-    const AUTHORIZED_CONE_IDS_GIST_URL = 'https://charlie-starr.github.io/starr1-authorized-cone-ids/authorized_cone_ids.json';
+    const AUTHORIZED_CONE_IDS_GIST_URL = 'https://github.com/Charlie-Starr/deepseekstarr1-authorized-cone-ids/raw/refs/heads/main/authorized_deepseekcone_ids.json';
     const GIST_CACHE_EXPIRY = 0; // 0 for instant updates. Was 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
     // CSS Selectors for the 2-3 previous messages (for context, if needed by prompt)
