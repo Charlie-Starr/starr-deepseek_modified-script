@@ -4,8 +4,8 @@
 // @version       3.5 // Prompt optimized for performance & restored PI detection
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key. Cone ID access, animated UI, notifications & dark mode.
 // @match         *://*/*
-// @downloadURL   https://github.com/Charlie-Starr/starr-deepseek_modified-script/raw/refs/heads/main/Starr1Res.js
-// @updateURL     https://github.com/Charlie-Starr/starr-deepseek_modified-script/raw/refs/heads/main/Starr1Res.js
+// @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
+// @updateURL     https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
 // @grant         GM_setValue
 // @grant         GM_getValue
 // @grant         GM_notification
