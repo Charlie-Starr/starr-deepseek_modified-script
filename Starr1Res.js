@@ -34,7 +34,7 @@
     // Your GitHub Gist URL for authorized CONE IDs
     // Starr will check this list to verify access.
     // UPDATED GIST URL as per request
-    const AUTHORIZED_CONE_IDS_GIST_URL = 'https://github.com/Charlie-Starr/deepseekstarr1-authorized-cone-ids/raw/refs/heads/main/authorized_deepseekcone_ids.json';
+    const AUTHORIZED_CONE_IDS_GIST_URL = 'https://charlie-starr.github.io/deepseekstarr1-authorized-cone-ids/authorized_deepseekcone_ids.json';
     const GIST_CACHE_EXPIRY = 0; // 0 for instant updates. Was 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
     // CSS Selectors for the 2-3 previous messages (for context, if needed by prompt)
