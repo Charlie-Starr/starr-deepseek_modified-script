@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Modified
 // @namespace     http://tampermonkey.net/
-// @version       3.7 // Prompt optimized for performance & restored PI detection
+// @version       3.8 // Prompt optimized for performance & restored PI detection
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key. Cone ID access, animated UI, notifications & dark mode.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -42,7 +42,7 @@
 
     // Custom Model API Configuration
     const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-    const MODEL_NAME = "deepseek/deepseek-chat-v3-0324:free";
+    const MODEL_NAME = "tngtech/deepseek-r1t2-chimera:free";
 
     // --- END CONFIGURATION ---
 
