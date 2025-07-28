@@ -42,7 +42,7 @@
 
     // Custom Model API Configuration
     const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-    const MODEL_NAME = "tngtech/deepseek-r1t2-chimera:free";
+    const MODEL_NAME = "thudm/glm-4-32b:free";
 
     // --- END CONFIGURATION ---
 
