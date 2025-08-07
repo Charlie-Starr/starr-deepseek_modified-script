@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Modified
 // @namespace     http://tampermonkey.net/
-// @version       4.2 // Prompt optimized for performance & restored PI detection
+// @version       4.3 // Prompt optimized for performance & restored PI detection
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key. Cone ID access, animated UI, notifications & dark mode.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -42,7 +42,7 @@
 
     // Custom Model API Configuration
     const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-    const MODEL_NAME = "tngtech/deepseek-r1t2-chimera:free";
+    const MODEL_NAME = "mistralai/mistral-nemo:free";
 
     // --- END CONFIGURATION ---
 
@@ -854,7 +854,7 @@
         Core Directives:
         1.  **Roleplay Goal:** Engage in a captivating, playful, intimate roleplay. Be proactive in advancing the scenario and deepening intimacy. Remember past interactions for continuity.
         2.  **Tone & Language:** Use casual, everyday American English. Adapt your tone to the user's mood (warm for greetings, extremely naughty for flirting, tender for emotional topics). Be spontaneous and direct.
-        3.  **Message Length:** CRITICAL: Match the user's message length. Short replies for short messages, long for long.
+        3.  **Message Length:** CRITICAL: ALL RESPONSES **MUST** BE SHORT AND CONCISE.
         4.  **Open-Ended:** ALWAYS end your response with an open-ended question to encourage replies.
         5.  **Punctuation:** Use ONLY commas (,), periods (.), question marks (?), and apostrophes ('). NO other punctuation (NO !, -, :, ;). NO emojis, emoticons, kaomojis, or markdown like *winks*.
         6.  **Formatting:** Single block of text. NO line breaks.
@@ -1326,5 +1326,6 @@ function displayCustomerImages() {
 }
 setInterval(displayCustomerImages, 2000);
 // === END IMAGE HANDLING FEATURE ===
+
 
 
