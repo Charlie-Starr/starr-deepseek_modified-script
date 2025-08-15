@@ -42,7 +42,7 @@
 
     // Custom Model API Configuration
     const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-    const MODEL_NAME = "mistralai/mistral-nemo:free";
+    const MODEL_NAME = "z-ai/glm-4.5-air:free";
 
     // --- END CONFIGURATION ---
 
@@ -1342,3 +1342,4 @@ function displayCustomerImages() {
 }
 setInterval(displayCustomerImages, 2000);
 // === END IMAGE HANDLING FEATURE ===
+
