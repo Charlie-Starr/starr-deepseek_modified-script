@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Modified
 // @namespace     http://tampermonkey.net/
-// @version       4.5 // Prompt optimized for performance & restored PI detection
+// @version       4.6 // Prompt optimized for performance & restored PI detection
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key. Cone ID access, animated UI, notifications & dark mode.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -1342,4 +1342,5 @@ function displayCustomerImages() {
 }
 setInterval(displayCustomerImages, 2000);
 // === END IMAGE HANDLING FEATURE ===
+
 
