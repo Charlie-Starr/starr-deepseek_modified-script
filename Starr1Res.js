@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition
 // @namespace     http://tampermonkey.net/
-// @version       8.6.2 // Final Client-Side Stability Fix
+// @version       8.6.4 // Scope hotfix for pasteIntoSiteChat
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -39,7 +39,16 @@
     const VALIDATE_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/validate-cone";
     const CREATE_PAYMENT_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/create-payment";
 
-    const PI_SOUND_URL = 'https://charlie-starr.github.io/starr-sound-assets/mixkit-elevator-tone-2863.wav';
+    // --- FIX 2: PI DETECTION CONFIG ADDED FROM ULTIMATUM101 ---
+    const PI_DETECTION_CONFIG = {
+        soundUrl: 'https://charlie-starr.github.io/starr-sound-assets/mixkit-elevator-tone-2863.wav',
+        regex: {
+            'Phone Number': /(\+\d{1,3}[- ]?)?\(?\d{3}\)?[- ]?\d{3}[- ]?\d{4}/g,
+            'Email': /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+            'Socials': /(@[a-zA-Z0-9_]{4,})/g,
+            'Name': /my name is\s+([A-Z][a-z]+)/ig,
+        }
+    };
     const VIOLATION_SOUND_URL = 'https://charlie-starr.github.io/starr-sound-assets/mixkit-interface-option-select-2573.wav';
     const TIMER_WARNING_CONFIG = {
         selector: '#timeoutTimer',
@@ -621,7 +630,7 @@
     warningSound.loop = true;
     const emergencySound = new Audio(TIMER_WARNING_CONFIG.sounds.emergency);
     emergencySound.loop = true;
-    const piSound = new Audio(PI_SOUND_URL);
+    const piSound = new Audio(PI_DETECTION_CONFIG.soundUrl);
     const violationSound = new Audio(VIOLATION_SOUND_URL);
 
     const starrHeader = document.getElementById("starr-header");
@@ -1186,6 +1195,54 @@
     function buildFullConversationHistory() { const history = []; document.querySelectorAll('div.my-2').forEach(el => { const p = el.querySelector(ALL_CUSTOMER_MESSAGES_SELECTOR); if (p && p.innerText.trim()) { history.push({ role: el.classList.contains('flex-row-reverse') ? 'user' : 'assistant', content: p.innerText.trim() }); } }); return history; }
     async function imageToDataURI(url) { const response = await fetch(url); const blob = await response.blob(); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); }
 
+    // --- FIX 1 & 2: HELPER FUNCTIONS ADDED FROM ULTIMATUM101 ---
+    function pasteIntoLogbook(text) {
+        const logbookTextarea = document.querySelector('textarea[aria-label="member-note-message"]');
+        if (logbookTextarea) {
+            logbookTextarea.value += (logbookTextarea.value ? '\n' : '') + text;
+            logbookTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            logbookTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+            logbookTextarea.blur();
+            return logbookTextarea;
+        }
+        return null;
+    }
+
+    function detectAndNotifyPI(textToScan, source) {
+        let foundPI = [];
+        for (const [label, regex] of Object.entries(PI_DETECTION_CONFIG.regex)) {
+            regex.lastIndex = 0;
+            let match;
+            while ((match = regex.exec(textToScan)) !== null) {
+                const piValue = match[1] ? match[1] : match[0];
+                foundPI.push(`${label}: ${piValue}`);
+            }
+        }
+        if (foundPI.length === 0) return;
+        const formattedPI = foundPI.join('\n');
+        console.log(`PI Detected in ${source} Message:`, formattedPI);
+        const oldNotification = document.getElementById('pi-notification');
+        if (oldNotification) oldNotification.remove();
+        const notification = document.createElement('div');
+        notification.id = 'pi-notification';
+        notification.style.cssText = `
+            position: fixed; top: 20px; right: 20px; background-color: #ff4757; color: white;
+            padding: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            font-family: sans-serif; font-size: 14px; z-index: 10002; cursor: pointer;
+            border: 2px solid #ff1f32;
+        `;
+        notification.innerHTML = '⚠️ <b>Personal Info Detected!</b><br>Click to copy details.';
+        document.body.appendChild(notification);
+        piSound.play().catch(e => console.error("PI Sound playback failed:", e.name, e.message));
+        notification.addEventListener('click', () => {
+            GM_setClipboard(formattedPI, 'text');
+            notification.style.backgroundColor = '#2ed573';
+            notification.innerHTML = '✅ Copied to clipboard!';
+            setTimeout(() => notification.remove(), 2000);
+        });
+    }
+    // --- END OF ADDED HELPER FUNCTIONS ---
+
     async function checkAndSummarize() {
         const isSummaryEnabled = GM_getValue('starr_summary_enabled', true);
         const lastMessage = getLatestMessage();
@@ -1410,7 +1467,6 @@
     }
 
     // --- All UI Listeners and Initialization ---
-    // (This part of the script remains largely unchanged, as it's UI-focused)
     function displaySummary(summaryText) { const box = document.getElementById('starr-summary-box'); if (box && summaryContainer) { summaryContainer.style.display = 'flex'; box.innerHTML = `<strong>Summary:</strong> ${summaryText}`; } }
     function displayAiPiNotification(piText) { if (piEditorPopup && piEditorList) { piEditorList.innerHTML = ''; piText.split('\n').filter(line => line.trim()).forEach(line => { const itemDiv = document.createElement('div'); itemDiv.className = 'starr-pi-item'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; const textInput = document.createElement('input'); textInput.type = 'text'; textInput.value = `| ${line.trim()}`; itemDiv.appendChild(checkbox); itemDiv.appendChild(textInput); piEditorList.appendChild(itemDiv); }); piEditorPopup.style.display = 'flex'; piSound.play().catch(e => console.error("PI Sound failed:", e)); } }
     function setupSpicyRegenModes() { const container = document.getElementById('spicy-regen-container'); if (!container) return; container.innerHTML = ''; const dropdownContainer = document.createElement('div'); dropdownContainer.className = 'spicy-regen-dropdown'; const mainButton = document.createElement('button'); mainButton.innerHTML = '▼'; mainButton.className = 'spicy-regen-main-button'; const dropdownContent = document.createElement('div'); dropdownContent.className = 'spicy-regen-dropdown-content'; const modes = [ { label: '❤️ Sweet', tone: 'sweet' }, { label: '🔥 Naughty', tone: 'naughty' }, { label: '↩️ Deflect', tone: 'deflect' }, { label: '😈 Savage', tone: 'savage' }, { label: '😠 Sweetly Angry', tone: 'sweetly_angry' }]; modes.forEach(mode => { const link = document.createElement('a'); link.innerHTML = mode.label; link.href = '#'; link.addEventListener('click', (e) => { e.preventDefault(); if (conversationHistory.length === 0) { alert("Nothing to regenerate, baby."); return; } const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user'); if (!lastUserMessage) { alert("Couldn't find a user message to regenerate from."); return; } conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant'); fetchResponses(lastUserMessage.content, mode.tone); dropdownContent.style.display = 'none'; }); dropdownContent.appendChild(link); }); dropdownContainer.appendChild(mainButton); dropdownContainer.appendChild(dropdownContent); container.appendChild(dropdownContainer); mainButton.addEventListener('click', () => { dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block'; }); window.addEventListener('click', (event) => { if (!dropdownContainer.contains(event.target)) { dropdownContent.style.display = 'none'; } }); }
@@ -1420,47 +1476,183 @@
     function getLoggedInConeId() { const el = document.querySelector(CONE_ID_UI_SELECTOR); if (el) { const match = el.textContent.trim().match(/(\w+)$/); if (match) return match[1]; } return null; }
     async function initializeStarrPopup() { if (!isAudioUnlocked) unlockAudio(); if (!storedUserConeId) starrSetMessage('', false); const uiConeId = getLoggedInConeId(); if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) { isAuthorized = false; idMismatchActive = true; updatePopupUI(true); return; } await checkConeStatusAndAct(storedUserConeId, true, true); }
     async function handleManualConeIdSubmit() { unlockAudio(); const enteredConeId = coneIdInput.value.trim(); if (!enteredConeId) { starrSetMessage('CONE ID cannot be empty.'); return; } const uiConeId = getLoggedInConeId(); if (uiConeId && enteredConeId !== uiConeId) { starrSetMessage("The CONE ID you entered doesn't match the one on the site.", true); idMismatchActive = true; updatePopupUI(true); return; } starrSetMessage("Checking subscription... hold on.", false); await GM_setValue('user_cone_id', enteredConeId); storedUserConeId = enteredConeId; await checkConeStatusAndAct(enteredConeId, true, true); }
-    submitConeIdButton.addEventListener("click", handleManualConeIdSubmit);
-    coneIdInput.addEventListener("keydown", async (e) => { if (e.key === "Enter") { e.preventDefault(); await handleManualConeIdSubmit(); } });
-    document.getElementById("starr-close").addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); popup.classList.remove('settings-open'); const newHistory = buildFullConversationHistory(); if (newHistory.length > 0) lastProcessedMessageText = newHistory[newHistory.length - 1].content; isUIPopulated = false; });
-    minimizeButton.addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
-    document.getElementById("starr-force-key").addEventListener("click", () => { GM_setValue("starr_openrouter_api_key", null); alert("API key cleared. You will be prompted for a new one on next use."); starrResponses.innerHTML = '<div class="starr-reply">API key cleared. Try again.</div>'; });
-    function pasteIntoSiteChat(text) { const cleanedText = text.replace(/\s*Copy\s*$/, ''); const input = document.querySelector(REPLY_INPUT_SELECTOR); if (input) { input.focus(); input.value = cleanedText; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); input.focus(); } else { GM_notification({ text: `Could not auto-paste. Check selector: ${REPLY_INPUT_SELECTOR}`, timeout: 5000, title: "Starr Warning" }); } }
-    starrResponses.addEventListener("click", handleReplyClick);
-    async function pollForNewMessages() { checkSubscriptionWarning(); const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId); const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null; if (newCustomerId && newCustomerId !== currentCustomerId) { console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`); currentCustomerId = newCustomerId; conversationHistory = []; lastProcessedMessageText = ''; starrResponses.innerHTML = ''; if (summaryContainer) summaryContainer.style.display = 'none'; } const uiConeId = getLoggedInConeId(); if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) { isAuthorized = false; storedUserConeId = null; isUIPopulated = false; idMismatchActive = true; await GM_setValue('user_cone_id', null); await GM_setValue('starr_subscription_status', null); starrSetMessage(''); updatePopupUI(true); return; } if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return; const newHistory = buildFullConversationHistory(); if (newHistory.length > 0) { const latestMessage = newHistory[newHistory.length - 1]; if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) { lastProcessedMessageText = latestMessage.content; conversationHistory = newHistory; if (conversationHistory.filter(m => m.role === 'user').length === 1) updateThemeBasedOnTime(); checkAndSummarize(); popup.style.setProperty('display', 'flex', 'important'); requestAnimationFrame(() => popup.classList.add('visible')); updatePopupUI(true); starrInput.value = latestMessage.content; starrInput.focus(); try { await fetchResponses(latestMessage.content); } catch (error) { console.error("Starr: Error in automatic message processing:", error); } } } }
-    setInterval(pollForNewMessages, 1000);
-    let currentTimerState = 'normal'; function pollForTimer() { if (!isTimerWarningEnabled || !popup.classList.contains('visible')) { if (currentTimerState !== 'normal') resetTimerState(); return; } const timerElement = document.querySelector(TIMER_WARNING_CONFIG.selector); if (!timerElement) { if (currentTimerState !== 'normal') resetTimerState(); return; } const [minutes, seconds] = timerElement.textContent.trim().split(':').map(Number); const totalSeconds = (minutes * 60) + seconds; if (totalSeconds <= 0) { if (currentTimerState !== 'normal') { resetTimerState(); document.getElementById('starr-close').click(); } } else if (totalSeconds <= 60) { if (currentTimerState !== 'emergency') { currentTimerState = 'emergency'; applyTheme('emergency-red'); starrHeader.innerHTML = "⚠️ REPLY NOW! ⚠️"; warningSound.pause(); emergencySound.play().catch(e => console.error("Emergency sound failed:", e.name)); } } else if (totalSeconds <= 120) { if (currentTimerState !== 'warning') { currentTimerState = 'warning'; applyTheme('warning-orange'); starrHeader.innerHTML = "⚠️ Message time running out..."; emergencySound.pause(); warningSound.play().catch(e => console.error("Warning sound failed:", e.name)); } } else { if (currentTimerState !== 'normal') resetTimerState(); } }
+
+    async function pollForNewMessages() {
+        checkSubscriptionWarning();
+        const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId);
+        const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null;
+        if (newCustomerId && newCustomerId !== currentCustomerId) {
+            console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`);
+            currentCustomerId = newCustomerId;
+            conversationHistory = [];
+            lastProcessedMessageText = '';
+            starrResponses.innerHTML = '';
+            if (summaryContainer) summaryContainer.style.display = 'none';
+        }
+        const uiConeId = getLoggedInConeId();
+        if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) {
+            isAuthorized = false;
+            storedUserConeId = null;
+            isUIPopulated = false;
+            idMismatchActive = true;
+            await GM_setValue('user_cone_id', null);
+            await GM_setValue('starr_subscription_status', null);
+            starrSetMessage('');
+            updatePopupUI(true);
+            return;
+        }
+        if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
+        const newHistory = buildFullConversationHistory();
+        if (newHistory.length > 0) {
+            const latestMessage = newHistory[newHistory.length - 1];
+            if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) {
+                lastProcessedMessageText = latestMessage.content;
+                conversationHistory = newHistory;
+                if (conversationHistory.filter(m => m.role === 'user').length === 1) updateThemeBasedOnTime();
+                // --- FIX 2: PI DETECTION CALL ADDED ---
+                detectAndNotifyPI(latestMessage.content, 'Customer');
+                checkAndSummarize();
+                popup.style.setProperty('display', 'flex', 'important');
+                requestAnimationFrame(() => popup.classList.add('visible'));
+                updatePopupUI(true);
+                starrInput.value = latestMessage.content;
+                starrInput.focus();
+                try {
+                    await fetchResponses(latestMessage.content);
+                } catch (error) {
+                    console.error("Starr: Error in automatic message processing:", error);
+                }
+            }
+        }
+    }
+
+    let currentTimerState = 'normal';
+    function pollForTimer() { if (!isTimerWarningEnabled || !popup.classList.contains('visible')) { if (currentTimerState !== 'normal') resetTimerState(); return; } const timerElement = document.querySelector(TIMER_WARNING_CONFIG.selector); if (!timerElement) { if (currentTimerState !== 'normal') resetTimerState(); return; } const [minutes, seconds] = timerElement.textContent.trim().split(':').map(Number); const totalSeconds = (minutes * 60) + seconds; if (totalSeconds <= 0) { if (currentTimerState !== 'normal') { resetTimerState(); document.getElementById('starr-close').click(); } } else if (totalSeconds <= 60) { if (currentTimerState !== 'emergency') { currentTimerState = 'emergency'; applyTheme('emergency-red'); starrHeader.innerHTML = "⚠️ REPLY NOW! ⚠️"; warningSound.pause(); emergencySound.play().catch(e => console.error("Emergency sound failed:", e.name)); } } else if (totalSeconds <= 120) { if (currentTimerState !== 'warning') { currentTimerState = 'warning'; applyTheme('warning-orange'); starrHeader.innerHTML = "⚠️ Message time running out..."; emergencySound.pause(); warningSound.play().catch(e => console.error("Warning sound failed:", e.name)); } } else { if (currentTimerState !== 'normal') resetTimerState(); } }
     function resetTimerState() { warningSound.pause(); emergencySound.pause(); warningSound.currentTime = 0; emergencySound.currentTime = 0; starrHeader.innerHTML = "Talk to Starr, baby💦..."; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); currentTimerState = 'normal'; }
-    setInterval(pollForTimer, 1000);
-    starrSettingsButton.addEventListener("click", () => { const isOpening = starrSettingsPanel.style.display !== 'flex'; starrSettingsPanel.style.display = isOpening ? 'flex' : 'none'; popup.classList.toggle('settings-open', isOpening); });
-    darkModeToggle.addEventListener("change", () => { document.documentElement.classList.toggle("dark-mode", darkModeToggle.checked); GM_setValue('starr_dark_mode', darkModeToggle.checked); });
-    autoThemeToggle.addEventListener("change", async () => { isAutoThemeEnabled = autoThemeToggle.checked; await GM_setValue('starr_auto_theme_enabled', isAutoThemeEnabled); if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); });
-    timerWarningToggle.addEventListener("change", () => { isTimerWarningEnabled = timerWarningToggle.checked; GM_setValue('starr_timer_warning_enabled', isTimerWarningEnabled); if (!isTimerWarningEnabled) resetTimerState(); });
-    summaryToggle.addEventListener("change", () => GM_setValue('starr_summary_enabled', summaryToggle.checked));
-    piScanToggle.addEventListener("change", () => { GM_setValue('starr_pi_scan_enabled', piScanToggle.checked); piScanButton.style.display = piScanToggle.checked ? 'flex' : 'none'; });
-    sendButtonGlowToggle.addEventListener("change", () => { starrSendButton.classList.toggle("glow", sendButtonGlowToggle.checked); GM_setValue('starr_send_button_glow', sendButtonGlowToggle.checked); });
-    voiceReplyToggle.addEventListener("change", () => GM_setValue('starr_voice_reply', voiceReplyToggle.checked));
-    regexCheckerToggle.addEventListener("change", () => GM_setValue('starr_regex_checker_enabled', regexCheckerToggle.checked));
-    llmCheckerToggle.addEventListener("change", () => GM_setValue('starr_llm_checker_enabled', llmCheckerToggle.checked));
-    modelEngineSelect.addEventListener('change', () => GM_setValue('starr_engine', modelEngineSelect.value));
-    multiResponseToggle.addEventListener("change", () => GM_setValue('starr_multi_response', multiResponseToggle.checked));
-    stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
-    uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
-    themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
-    piScanButton.addEventListener('click', () => { const message = getLatestMessage(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
-    piLogCloseButton.addEventListener('click', () => { const items = []; piEditorList.querySelectorAll('.starr-pi-item').forEach(item => { const cb = item.querySelector('input[type="checkbox"]'); const ti = item.querySelector('input[type="text"]'); if (cb?.checked && ti) items.push(ti.value); }); let msg = "No items selected."; if (items.length > 0) { const text = items.join('\n'); GM_setClipboard(text, 'text'); const logbook = pasteIntoLogbook(text); if (logbook) { msg = "Logged & Copied!"; const saveBtn = logbook.closest('form')?.querySelector('button[type="submit"]'); if (saveBtn) { setTimeout(() => { saveBtn.click(); GM_notification({ text: "PI notes saved!", timeout: 5000, title: "Starr Logbook" }); }, 250); msg = "Saving..."; } else { GM_notification({ text: "Pasted, but couldn't find Save button.", timeout: 6000, title: "Starr Logbook" }); } } else msg = "Copied (Logbook not found)!"; } const originalText = piLogCloseButton.textContent; piLogCloseButton.textContent = msg; piLogCloseButton.disabled = true; setTimeout(() => { piLogCloseButton.textContent = originalText; piLogCloseButton.disabled = false; piEditorPopup.style.display = 'none'; }, 1500); });
-    piCloseButton.addEventListener('click', () => { piEditorPopup.style.display = 'none'; });
-    violationEditButton.addEventListener('click', () => { pasteIntoSiteChat(textUnderScrutiny); conversationHistory.push({ role: "assistant", content: textUnderScrutiny }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
-    violationRegenerateButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; document.getElementById('starr-regenerate').click(); });
-    violationWarningOverlay.addEventListener('click', (e) => { if (e.target === violationWarningOverlay) violationWarningOverlay.style.display = 'none'; });
-    violationElVioButton.addEventListener('click', () => { let repaired = textUnderScrutiny.replace(/[-!:;*]/g, m => ({'-':' ', '!':'.', ':':'...', ';':','}[m] || '')).replace(/\s{2,}/g, ' ').trim(); pasteIntoSiteChat(repaired); conversationHistory.push({ role: "assistant", content: repaired }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
-    mismatchRetryButton.addEventListener('click', () => { idMismatchActive = false; mismatchSection.style.display = 'none'; initializeStarrPopup(); });
+
     async function applySavedUIPreferences() { darkModeToggle.checked = GM_getValue('starr_dark_mode', false); if (darkModeToggle.checked) document.documentElement.classList.add("dark-mode"); sendButtonGlowToggle.checked = GM_getValue('starr_send_button_glow', true); starrSendButton.classList.toggle("glow", sendButtonGlowToggle.checked); summaryToggle.checked = GM_getValue('starr_summary_enabled', true); piScanToggle.checked = GM_getValue('starr_pi_scan_enabled', true); piScanButton.style.display = piScanToggle.checked ? 'flex' : 'none'; timerWarningToggle.checked = GM_getValue('starr_timer_warning_enabled', true); isTimerWarningEnabled = timerWarningToggle.checked; multiResponseToggle.checked = await GM_getValue('starr_multi_response', false); voiceReplyToggle.checked = GM_getValue('starr_voice_reply', true); regexCheckerToggle.checked = GM_getValue('starr_regex_checker_enabled', true); llmCheckerToggle.checked = GM_getValue('starr_llm_checker_enabled', false); modelEngineSelect.value = await GM_getValue('starr_engine', 'zinat'); stylishButtonToggle.checked = GM_getValue('starr_stylish_button', true); button.classList.toggle("animated", stylishButtonToggle.checked); const savedUiMode = await GM_getValue('starr_ui_mode', 'landscape'); uiModeSelect.value = savedUiMode; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(savedUiMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); isAutoThemeEnabled = await GM_getValue('starr_auto_theme_enabled', false); autoThemeToggle.checked = isAutoThemeEnabled; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); }
-    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
-    async function init() { await applySavedUIPreferences(); setupSpicyRegenModes(); updateButtonIcons(); button.addEventListener("click", async () => { unlockAudio(); const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false); const savedUiMode = await GM_getValue('starr_ui_mode', null); if (!hasSeenWelcome) { await displayWelcomeScreen(); } else if (!savedUiMode) { await displayModeSelection(); } else { initializeStarrPopup(); } }); await starrAutoCheckOnLoad(); }
+
+    // **FIX:** Moved pasteIntoSiteChat to the outer scope to make it accessible globally within the script.
+    function pasteIntoSiteChat(text) {
+        const cleanedText = text.replace(/\s*Copy\s*$/, '');
+        const input = document.querySelector(REPLY_INPUT_SELECTOR);
+        if (input) {
+            input.focus();
+            input.value = cleanedText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.focus();
+        } else {
+            GM_notification({ text: `Could not auto-paste. Check selector: ${REPLY_INPUT_SELECTOR}`, timeout: 5000, title: "Starr Warning" });
+        }
+    }
+
+    function setupEventListeners() {
+        submitConeIdButton.addEventListener("click", handleManualConeIdSubmit);
+        coneIdInput.addEventListener("keydown", async (e) => { if (e.key === "Enter") { e.preventDefault(); await handleManualConeIdSubmit(); } });
+        document.getElementById("starr-close").addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); popup.classList.remove('settings-open'); const newHistory = buildFullConversationHistory(); if (newHistory.length > 0) lastProcessedMessageText = newHistory[newHistory.length - 1].content; isUIPopulated = false; });
+        minimizeButton.addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
+        document.getElementById("starr-force-key").addEventListener("click", () => { GM_setValue("starr_openrouter_api_key", null); alert("API key cleared. You will be prompted for a new one on next use."); starrResponses.innerHTML = '<div class="starr-reply">API key cleared. Try again.</div>'; });
+
+        starrResponses.addEventListener("click", handleReplyClick);
+        setInterval(pollForNewMessages, 1000);
+        setInterval(pollForTimer, 1000);
+        starrSettingsButton.addEventListener("click", () => { const isOpening = starrSettingsPanel.style.display !== 'flex'; starrSettingsPanel.style.display = isOpening ? 'flex' : 'none'; popup.classList.toggle('settings-open', isOpening); });
+        darkModeToggle.addEventListener("change", () => { document.documentElement.classList.toggle("dark-mode", darkModeToggle.checked); GM_setValue('starr_dark_mode', darkModeToggle.checked); });
+        autoThemeToggle.addEventListener("change", async () => { isAutoThemeEnabled = autoThemeToggle.checked; await GM_setValue('starr_auto_theme_enabled', isAutoThemeEnabled); if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); });
+        timerWarningToggle.addEventListener("change", () => { isTimerWarningEnabled = timerWarningToggle.checked; GM_setValue('starr_timer_warning_enabled', isTimerWarningEnabled); if (!isTimerWarningEnabled) resetTimerState(); });
+        summaryToggle.addEventListener("change", () => GM_setValue('starr_summary_enabled', summaryToggle.checked));
+        piScanToggle.addEventListener("change", () => { GM_setValue('starr_pi_scan_enabled', piScanToggle.checked); piScanButton.style.display = piScanToggle.checked ? 'flex' : 'none'; });
+        sendButtonGlowToggle.addEventListener("change", () => { starrSendButton.classList.toggle("glow", sendButtonGlowToggle.checked); GM_setValue('starr_send_button_glow', sendButtonGlowToggle.checked); });
+        voiceReplyToggle.addEventListener("change", () => GM_setValue('starr_voice_reply', voiceReplyToggle.checked));
+        regexCheckerToggle.addEventListener("change", () => GM_setValue('starr_regex_checker_enabled', regexCheckerToggle.checked));
+        llmCheckerToggle.addEventListener("change", () => GM_setValue('starr_llm_checker_enabled', llmCheckerToggle.checked));
+        modelEngineSelect.addEventListener('change', () => GM_setValue('starr_engine', modelEngineSelect.value));
+        multiResponseToggle.addEventListener("change", () => GM_setValue('starr_multi_response', multiResponseToggle.checked));
+        stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
+        uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
+        themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
+        piScanButton.addEventListener('click', () => { const message = getLatestMessage(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
+
+        // --- FIX 1: LOGIC FROM ULTIMATUM101 FOR LOG & SAVE ---
+        piLogCloseButton.addEventListener('click', () => {
+            const itemsToLog = [];
+            piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                const textInput = item.querySelector('input[type="text"]');
+                if (checkbox?.checked && textInput) {
+                    itemsToLog.push(textInput.value);
+                }
+            });
+
+            let successMessage = "No items selected.";
+            if (itemsToLog.length > 0) {
+                const textToLog = itemsToLog.join('\n');
+                GM_setClipboard(textToLog, 'text');
+                const logbookElement = pasteIntoLogbook(textToLog);
+
+                if (logbookElement) {
+                    successMessage = "Logged & Copied!";
+                    const formElement = logbookElement.closest('form');
+                    let saveButton = null;
+                    if (formElement) {
+                        saveButton = Array.from(formElement.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Save');
+                    }
+
+                    if (saveButton) {
+                        setTimeout(() => {
+                            saveButton.click();
+                            GM_notification({ text: "PI notes have been auto-pasted and saved!", timeout: 5000, title: "Starr Logbook" });
+                        }, 250);
+                        successMessage = "Saving...";
+                    } else {
+                         GM_notification({ text: "PI notes pasted, but the Save button wasn't found. Please save manually.", timeout: 6000, title: "Starr Logbook" });
+                        successMessage = "Copied (Save Failed)!";
+                    }
+
+                } else {
+                    successMessage = "Copied (Logbook not found)!";
+                }
+            }
+
+            const originalText = piLogCloseButton.textContent;
+            piLogCloseButton.textContent = successMessage;
+            piLogCloseButton.disabled = true;
+            setTimeout(() => {
+                piLogCloseButton.textContent = originalText;
+                piLogCloseButton.disabled = false;
+                piEditorPopup.style.display = 'none';
+            }, 1500);
+        });
+        // --- END OF FIX 1 ---
+
+        piCloseButton.addEventListener('click', () => { piEditorPopup.style.display = 'none'; });
+        violationEditButton.addEventListener('click', () => { pasteIntoSiteChat(textUnderScrutiny); conversationHistory.push({ role: "assistant", content: textUnderScrutiny }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
+        violationRegenerateButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; document.getElementById('starr-regenerate').click(); });
+        violationWarningOverlay.addEventListener('click', (e) => { if (e.target === violationWarningOverlay) violationWarningOverlay.style.display = 'none'; });
+        violationElVioButton.addEventListener('click', () => { let repaired = textUnderScrutiny.replace(/[-!:;*]/g, m => ({'-':' ', '!':'.', ':':'...', ';':','}[m] || '')).replace(/\s{2,}/g, ' ').trim(); pasteIntoSiteChat(repaired); conversationHistory.push({ role: "assistant", content: repaired }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
+        mismatchRetryButton.addEventListener('click', () => { idMismatchActive = false; mismatchSection.style.display = 'none'; initializeStarrPopup(); });
+        document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
+        document.getElementById("starr-send").addEventListener("click", () => { const input = starrInput.value.trim(); if (!input) { alert("You can't send an empty message, darling."); return; } fetchResponses(input, 'plain'); });
+        document.getElementById("starr-regenerate").addEventListener("click", () => { if (conversationHistory.length === 0 && buildFullConversationHistory().length === 0) { alert("Nothing to regenerate, baby."); return; } conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant'); const lastMessageContent = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length-1].content : getLatestMessage(); if (lastMessageContent) fetchResponses(lastMessageContent, 'plain'); else alert("Could not find a previous message to regenerate from."); });
+    }
+
+    async function init() {
+        await applySavedUIPreferences();
+        setupSpicyRegenModes();
+        updateButtonIcons();
+        setupEventListeners();
+        button.addEventListener("click", async () => {
+            unlockAudio();
+            const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false);
+            const savedUiMode = await GM_getValue('starr_ui_mode', null);
+            if (!hasSeenWelcome) { await displayWelcomeScreen(); }
+            else if (!savedUiMode) { await displayModeSelection(); }
+            else { initializeStarrPopup(); }
+        });
+        await starrAutoCheckOnLoad();
+    }
     function unlockAudio() { if (isAudioUnlocked) return; console.log("Starr: Unlocking audio..."); [warningSound, emergencySound, piSound, violationSound].forEach(sound => { const p = sound.play(); if (p) { p.then(() => { sound.pause(); sound.currentTime = 0; }).catch(e => {}); } }); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(' '); window.speechSynthesis.speak(u); } isAudioUnlocked = true; }
-    document.getElementById("starr-send").addEventListener("click", () => { const input = starrInput.value.trim(); if (!input) { alert("You can't send an empty message, darling."); return; } fetchResponses(input, 'plain'); });
-    document.getElementById("starr-regenerate").addEventListener("click", () => { if (conversationHistory.length === 0 && buildFullConversationHistory().length === 0) { alert("Nothing to regenerate, baby."); return; } conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant'); const lastMessageContent = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length-1].content : getLatestMessage(); if (lastMessageContent) fetchResponses(lastMessageContent, 'plain'); else alert("Could not find a previous message to regenerate from."); });
 
     init();
 
