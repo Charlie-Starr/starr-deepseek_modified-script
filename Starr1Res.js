@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition
 // @namespace     http://tampermonkey.net/
-// @version       8.6.0 // Split-Architecture Edition (Client)
+// @version       8.6.2 // Final Client-Side Stability Fix
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -33,7 +33,7 @@
         localTime: '#memberTime',
         aboutUser: '#about-user'
     };
-    
+
     // --- BACKEND & ASSET URLS ---
     const STARR_BACKEND_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/starr_backend";
     const VALIDATE_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/validate-cone";
@@ -668,17 +668,178 @@
 
     // --- All functions below ---
 
+    async function displayWelcomeScreen() {
+        const welcomeHTML = `
+            <div id="starr-welcome-overlay">
+                <div id="starr-welcome-popup">
+                    <h3 id="welcome-title">Hey, fucker<span class="emoji">😉</span>...</h3>
+                    <div class="starr-replies" id="starr-welcome-features">
+                        <div class="starr-reply">
+                            <p>I see you're new here. Before we get naughty, let me show you what I can do for you, baby...</p>
+                            <strong>My Core Features:</strong>
+                            <ul>
+                                <li><strong>Full Conversation Context:</strong> I now read the entire chat history on the screen, so I'll always know what we're talking about. No more confusion! ✅</li>
+                                <li><strong>Smart Model Switching:</strong> If a message has a picture, I'll automatically use my special vision model (Chioma) to see it, then switch right back to your favorite text model for our chat. 🧠</li>
+                                <li><strong>Multi-Response Mode:</strong> Get 3 reply options from a single API call! You can toggle this in Settings. 🔄</li>
+                                <li><strong>Dual Violation Checkers:</strong> A lightning-fast Regex checker for common errors and a new, context-aware AI Judge (powered by models like Claude 3.5) for catching subtle persona breaks. You can enable either or both! 🔥</li>
+                                <li><strong>Conversation Summary:</strong> I'll give you a quick summary of long messages so you're always up to speed.</li>
+                                <li><strong>PI Scanner:</strong> I can intelligently scan for personal info before you send anything risky.</li>
+                                <li><strong>Top-Tier Response Engines:</strong> Choose from recommended response styles like Zinat in the Settings!</li>
+                                <li><strong>Adaptive UI:</strong> I can switch between Landscape 💻 for desktops and a sleek, icon-based Portrait 📱 mode for mobile.</li>
+                            </ul>
+                            <strong>Your Hotkeys to Control Me:</strong>
+                            <ul>
+                                <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> &mdash; Open or close me anytime.</li>
+                                <li><kbd>Esc</kbd> &mdash; Close my window (when it's open).</li>
+                                <li><kbd>Ctrl</kbd> + <kbd>M</kbd> &mdash; Minimize my window when you need space.</li>
+                                <li><kbd>Enter</kbd> or <kbd>Ctrl</kbd> + <kbd>Enter</kbd> &mdash; Send your message from my input box.</li>
+                                <li><kbd>Ctrl</kbd> + <kbd>R</kbd> &mdash; Not happy with my reply? Make me try again.</li>
+                                <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> &mdash; Open the 'Spicy Regenerate' menu.</li>
+                                <li><kbd>Tab</kbd> &mdash; Run an intelligent scan for Personal Info (PI).</li>
+                                <li><kbd>Ctrl</kbd> + <kbd>Q</kbd> &mdash; Force a summary of the latest message.</li>
+                                <li><kbd>ArrowUp</kbd> / <kbd>ArrowDown</kbd> &mdash; Navigate through my generated replies.</li>
+                                <li><kbd>T</kbd> &mdash; Toggle the Settings panel.</li>
+                                <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd> &mdash; Force prompt for a new API Key.</li>
+                            </ul>
+                             <p>You can find more toggles in the <strong>Settings</strong> panel (hotkey <kbd>T</kbd>) once we start chatting. Now, let's have some fun...</p>
+                        </div>
+                    </div>
+                    <div id="starr-buttons">
+                         <button id="starr-welcome-close">Got it, let's go!</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        const welcomeCSS = `
+            #starr-welcome-overlay {
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.75);
+                z-index: 99999; display: flex; justify-content: center; align-items: center;
+                font-family: Arial, sans-serif;
+            }
+            #starr-welcome-popup {
+                width: 650px; max-height: 90vh; background: var(--starr-popup-background);
+                border: 2px solid var(--starr-border-color); border-radius: 20px; padding: 20px;
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); display: flex;
+                flex-direction: column; font-family: Arial, sans-serif; color: var(--starr-text-color);
+            }
+            #starr-welcome-popup h3#welcome-title {
+                font-family: 'Georgia', serif; color: var(--starr-header-color);
+                text-align: center; margin-bottom: 20px; padding-bottom: 10px;
+                border-bottom: 2px solid var(--starr-header-border); text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+                font-weight: 900 !important; opacity: 1 !important; font-size: 24px !important;
+                display: flex; align-items: center; justify-content: center; gap: 8px;
+            }
+            #starr-welcome-popup h3 .emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 26px; }
+            #starr-welcome-features { overflow-y: auto; padding-right: 10px; margin-bottom: 20px; }
+            #starr-welcome-features .starr-reply {
+                background: var(--starr-reply-background); border-color: var(--starr-reply-border);
+                color: var(--starr-reply-text); font-size: 14px; line-height: 1.6; cursor: default; white-space: normal;
+            }
+            #starr-welcome-features strong { color: var(--starr-header-color); display: block; margin-top: 15px; margin-bottom: 5px; font-size: 1.1em; }
+            #starr-welcome-features ul { list-style: none; padding-left: 10px; margin: 0; }
+            #starr-welcome-features li { margin-bottom: 8px; }
+            #starr-welcome-features p { margin: 15px 0 5px 0; }
+            #starr-welcome-features kbd {
+                background-color: var(--starr-popup-background); border: 1px solid var(--starr-border-color);
+                border-radius: 4px; padding: 2px 6px; font-family: monospace; font-size: 0.9em;
+                color: var(--starr-text-color); box-shadow: 1px 1px 1px rgba(0,0,0,0.1); margin: 0 2px;
+            }
+            #starr-welcome-close {
+                padding: 12px 25px; border-radius: 8px; font-weight: bold; border: none;
+                cursor: pointer; font-size: 16px; width: 100%;
+                background: var(--starr-send-button-bg); color: white; position: relative;
+                overflow: hidden; transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            }
+            #starr-welcome-close::before {
+                content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+                background: radial-gradient(circle, var(--starr-send-button-glow-color) 0%, transparent 70%);
+                animation: heatGlow 1.5s infinite alternate; z-index: 0; opacity: 0.7;
+            }
+            #starr-welcome-close:hover { box-shadow: 0 0 10px var(--starr-send-button-glow-color); }
+        `;
+        document.head.insertAdjacentHTML('beforeend', `<style>${welcomeCSS}</style>`);
+        document.body.insertAdjacentHTML('beforeend', welcomeHTML);
+        document.getElementById('starr-welcome-close').addEventListener('click', async () => {
+            document.getElementById('starr-welcome-overlay').remove();
+            await GM_setValue('hasSeenWelcomePage', true);
+            await displayModeSelection();
+        });
+    }
+
+    async function displayModeSelection() {
+        const modeHTML = `
+            <div id="starr-mode-overlay">
+                <div id="starr-mode-popup">
+                    <h3>Choose Your UI Mode</h3>
+                    <p>How do you want Starr’s interface to appear?</p>
+                    <div id="starr-mode-buttons">
+                        <button id="mode-landscape">💻 Landscape (Desktop)</button>
+                        <button id="mode-portrait">📱 Portrait (Mobile)</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modeCSS = `
+            #starr-mode-overlay {
+                position: fixed; top:0; left:0; width:100%; height:100%;
+                background: rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center;
+                z-index: 99999; font-family: Arial, sans-serif;
+            }
+            #starr-mode-popup {
+                background: var(--starr-popup-background); border: 2px solid var(--starr-border-color);
+                border-radius: 20px; padding: 25px; color: var(--starr-text-color);
+                width: 90vw; max-width: 400px; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            }
+             #starr-mode-popup h3 {
+                font-family: 'Georgia', serif; font-size: 24px; color: var(--starr-header-color);
+                text-align: center; margin: 0 0 10px 0;
+            }
+            #starr-mode-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+            #starr-mode-buttons button {
+                padding: 12px; border: none; border-radius: 8px; cursor: pointer;
+                font-weight: bold; font-size: 14px; background: var(--starr-send-button-bg); color:white;
+                transition: transform 0.2s ease;
+            }
+            #starr-mode-buttons button:hover { transform: scale(1.05); }
+        `;
+        document.head.insertAdjacentHTML('beforeend', `<style>${modeCSS}</style>`);
+        document.body.insertAdjacentHTML('beforeend', modeHTML);
+        document.getElementById('mode-landscape').onclick = async () => {
+            document.body.classList.remove('ui-portrait'); document.body.classList.add('ui-landscape');
+            await GM_setValue('starr_ui_mode', 'landscape');
+            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove(); initializeStarrPopup();
+        };
+        document.getElementById('mode-portrait').onclick = async () => {
+            document.body.classList.remove('ui-landscape'); document.body.classList.add('ui-portrait');
+            await GM_setValue('starr_ui_mode', 'portrait');
+            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove(); initializeStarrPopup();
+        };
+    }
+
     // ---- BEGIN STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
-    async function redirectToCheckout(coneId, weeks, email, notificationEl) {
+    async function redirectToCheckout(coneId, weeks, email, notificationEl, debtAmount = null) {
         try {
             notificationEl.textContent = "Generating secure payment link...";
+
+            const payload = {
+                cone_id: coneId,
+                email: email
+            };
+
+            if (debtAmount !== null && debtAmount > 0) {
+                payload.debt_amount = debtAmount; // Add the debt amount to the payload
+            } else {
+                payload.weeks = weeks; // Use the original weeks logic for subscriptions
+            }
+
             const response = await new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: "POST",
                     url: CREATE_PAYMENT_URL,
                     headers: { "Content-Type": "application/json" },
-                    data: JSON.stringify({ cone_id: coneId, weeks, email }),
+                    data: JSON.stringify(payload), // Send the new dynamic payload
                     onload: res => resolve(res),
                     onerror: err => reject(err)
                 });
@@ -824,7 +985,6 @@
         }
 
         modal.querySelector('#starr-pay-now').addEventListener('click', async () => {
-            const weeks = Number(modal.dataset.weeks || 1);
             const emailInput = modal.querySelector('#starr-pay-email').value.trim();
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -840,7 +1000,14 @@
             const [localPart, domain] = emailInput.split('@');
             const emailVal = `${localPart.split('+')[0]}+${Date.now()}@${domain}`;
 
-            await redirectToCheckout(coneId, weeks, emailVal, notificationEl);
+            if (mode === 'debt' && debtAmount > 0) {
+                // For debt, call with the specific debtAmount and 0 weeks
+                await redirectToCheckout(coneId, 0, emailVal, notificationEl, debtAmount);
+            } else {
+                // For subscriptions, use the original weeks logic
+                const weeks = Number(modal.dataset.weeks || 1);
+                await redirectToCheckout(coneId, weeks, emailVal, notificationEl);
+            }
         });
     }
 
@@ -1000,6 +1167,18 @@
     // ---- END STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
     // --- HELPER FUNCTIONS ---
+    function updateButtonIcons() {
+        const isPortrait = document.body.classList.contains('ui-portrait');
+        const buttons = {
+            'starr-send': { text: 'Send', icon: '📤' }, 'starr-regenerate': { text: 'Regenerate', icon: '🔄' },
+            'starr-force-key': { text: 'Force New API Key', icon: '🔑' }, 'starr-settings-button': { text: 'Settings', icon: '⚙️' },
+            'starr-close': { text: 'Close', icon: '❌' }
+        };
+        for (const [id, content] of Object.entries(buttons)) {
+            const btn = document.getElementById(id);
+            if (btn) btn.textContent = isPortrait ? content.icon : content.text;
+        }
+    }
     function getLatestMessage() { const messages = document.querySelectorAll(ALL_CUSTOMER_MESSAGES_SELECTOR); return messages.length > 0 ? messages[messages.length - 1].innerText.trim() : ''; }
     function getPersonaInfo() { const nameEl = document.querySelector('h5.fw-bold.mb-1'); let name = nameEl ? nameEl.textContent.trim().split('(')[1]?.replace(')', '') || nameEl.textContent.trim() : "the other person"; return { name: name, status: document.querySelector('td.p-1.ps-3.bg-light-subtle')?.textContent.trim() || "unknown", age: document.querySelector('td.p-1.ps-3:not(.bg-light-subtle)')?.textContent.trim() || "unknown", location: document.querySelector('h6.text-black-50')?.textContent.trim() || "an unknown location", about: document.querySelector('#about-profile')?.textContent.trim() || null }; }
     function getCustomerInfo() { return { gender: "male", status: document.querySelector(CUSTOMER_INFO_SELECTORS.status)?.textContent.trim() || "unknown", age: document.querySelector(CUSTOMER_INFO_SELECTORS.age)?.textContent.trim() || "unknown", location: document.querySelector(CUSTOMER_INFO_SELECTORS.location)?.textContent.trim() || "your area", about: document.querySelector(CUSTOMER_INFO_SELECTORS.aboutUser)?.textContent.trim() || null }; }
@@ -1022,7 +1201,7 @@
         const lastMessage = getLatestMessage();
         const apiKey = GM_getValue("starr_openrouter_api_key", null);
         if (!isSummaryEnabled || lastMessage.length === 0 || !apiKey) return;
-        
+
         const summaryBox = document.getElementById('starr-summary-box');
         if (summaryBox && summaryContainer) {
             summaryContainer.style.display = 'flex';
@@ -1052,7 +1231,7 @@
     async function scanMessageForPI(text) {
         const apiKey = GM_getValue("starr_openrouter_api_key", null);
         if (!apiKey) { alert("Cannot scan for PI without an API key."); return; }
-        
+
         const originalContent = piScanButton.textContent;
         piScanButton.textContent = '⏳'; piScanButton.disabled = true;
 
@@ -1077,7 +1256,7 @@
                 console.error("Starr: AI PI Scan failed:", err);
                 alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
             },
-            finally: () => {
+            onfinally: () => {
                 piScanButton.textContent = originalContent; piScanButton.disabled = false;
             }
         });
@@ -1095,12 +1274,12 @@
 
         starrLoading.style.setProperty('display', 'flex', 'important');
         starrResponses.innerHTML = "";
-        
+
         const lastUserMessageElement = Array.from(document.querySelectorAll('div.my-2.flex-row-reverse')).pop();
         const imagesToProcess = lastUserMessageElement ? lastUserMessageElement.querySelectorAll('img[alt=""]') : [];
-        
+
         const conversation = buildFullConversationHistory();
-        
+
         // Handle images by converting them to data URIs and modifying the last message
         if (imagesToProcess.length > 0 && conversation.length > 0) {
             try {
@@ -1125,7 +1304,7 @@
             hasImage: imagesToProcess.length > 0,
             preferredEngine: await GM_getValue('starr_engine', 'zinat')
         };
-        
+
         GM_xmlhttpRequest({
             method: "POST",
             url: STARR_BACKEND_URL,
@@ -1137,7 +1316,7 @@
                     const responseData = JSON.parse(res.responseText);
                     const rawContent = responseData.choices?.[0]?.message?.content?.trim() || "Mmm... I'm speechless, baby. Try again?";
                     const replies = payload.isMultiResponseEnabled ? rawContent.split('|||').map(r => r.trim()) : [rawContent];
-                    
+
                     starrResponses.innerHTML = "";
                     replies.forEach(replyText => {
                         if (replyText) {
@@ -1179,7 +1358,7 @@
         const clickedReplyElement = event.target;
         textUnderScrutiny = clickedReplyElement.textContent;
         const apiKey = GM_getValue("starr_openrouter_api_key", null);
-        
+
         const checkers = {
             regex: regexCheckerToggle.checked,
             llm: llmCheckerToggle.checked
@@ -1199,7 +1378,7 @@
             method: "POST", url: STARR_BACKEND_URL,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
-                action: 'check_violation', apiKey, textToScrutinize, checkers,
+                action: 'check_violation', apiKey, textToScrutinize: textUnderScrutiny, checkers,
                 userContext: conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1].content : ''
             }),
             onload: (res) => {
@@ -1278,11 +1457,11 @@
     mismatchRetryButton.addEventListener('click', () => { idMismatchActive = false; mismatchSection.style.display = 'none'; initializeStarrPopup(); });
     async function applySavedUIPreferences() { darkModeToggle.checked = GM_getValue('starr_dark_mode', false); if (darkModeToggle.checked) document.documentElement.classList.add("dark-mode"); sendButtonGlowToggle.checked = GM_getValue('starr_send_button_glow', true); starrSendButton.classList.toggle("glow", sendButtonGlowToggle.checked); summaryToggle.checked = GM_getValue('starr_summary_enabled', true); piScanToggle.checked = GM_getValue('starr_pi_scan_enabled', true); piScanButton.style.display = piScanToggle.checked ? 'flex' : 'none'; timerWarningToggle.checked = GM_getValue('starr_timer_warning_enabled', true); isTimerWarningEnabled = timerWarningToggle.checked; multiResponseToggle.checked = await GM_getValue('starr_multi_response', false); voiceReplyToggle.checked = GM_getValue('starr_voice_reply', true); regexCheckerToggle.checked = GM_getValue('starr_regex_checker_enabled', true); llmCheckerToggle.checked = GM_getValue('starr_llm_checker_enabled', false); modelEngineSelect.value = await GM_getValue('starr_engine', 'zinat'); stylishButtonToggle.checked = GM_getValue('starr_stylish_button', true); button.classList.toggle("animated", stylishButtonToggle.checked); const savedUiMode = await GM_getValue('starr_ui_mode', 'landscape'); uiModeSelect.value = savedUiMode; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(savedUiMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); isAutoThemeEnabled = await GM_getValue('starr_auto_theme_enabled', false); autoThemeToggle.checked = isAutoThemeEnabled; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); }
     document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
-    async function init() { await applySavedUIPreferences(); setupSpicyRegenModes(); updateButtonIcons(); button.addEventListener("click", async () => { unlockAudio(); const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false); const savedUiMode = await GM_getValue('starr_ui_mode', null); if (!hasSeenWelcome) displayWelcomeScreen(); else if (!savedUiMode) displayModeSelection(); else initializeStarrPopup(); }); await starrAutoCheckOnLoad(); }
+    async function init() { await applySavedUIPreferences(); setupSpicyRegenModes(); updateButtonIcons(); button.addEventListener("click", async () => { unlockAudio(); const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false); const savedUiMode = await GM_getValue('starr_ui_mode', null); if (!hasSeenWelcome) { await displayWelcomeScreen(); } else if (!savedUiMode) { await displayModeSelection(); } else { initializeStarrPopup(); } }); await starrAutoCheckOnLoad(); }
     function unlockAudio() { if (isAudioUnlocked) return; console.log("Starr: Unlocking audio..."); [warningSound, emergencySound, piSound, violationSound].forEach(sound => { const p = sound.play(); if (p) { p.then(() => { sound.pause(); sound.currentTime = 0; }).catch(e => {}); } }); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(' '); window.speechSynthesis.speak(u); } isAudioUnlocked = true; }
     document.getElementById("starr-send").addEventListener("click", () => { const input = starrInput.value.trim(); if (!input) { alert("You can't send an empty message, darling."); return; } fetchResponses(input, 'plain'); });
     document.getElementById("starr-regenerate").addEventListener("click", () => { if (conversationHistory.length === 0 && buildFullConversationHistory().length === 0) { alert("Nothing to regenerate, baby."); return; } conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant'); const lastMessageContent = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length-1].content : getLatestMessage(); if (lastMessageContent) fetchResponses(lastMessageContent, 'plain'); else alert("Could not find a previous message to regenerate from."); });
-    
+
     init();
 
 })();
