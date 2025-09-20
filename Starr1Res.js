@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition
 // @namespace     http://tampermonkey.net/
-// @version       8.7.0 // Final Client-Side Stability Fix
+// @version       8.7.1 // Added Modal Minimize & Regex PI Fix
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -64,7 +64,9 @@
         isAutoThemeEnabled = false, textUnderScrutiny = '', isUIPopulated = false,
         isTimerWarningEnabled = true, isAudioUnlocked = false,
         lastProcessedMessageText = '',
-        currentCustomerId = null;
+        currentCustomerId = null,
+        isPiEditorMinimized = false,
+        isViolationMinimized = false;
 
     // --- All CSS, UI elements, and other script logic remains below ---
     const style = document.createElement("style");
@@ -230,6 +232,16 @@
             z-index: 10003; display: none; flex-direction: column; gap: 10px; color: var(--starr-text-color);
             max-height: 80vh;
         }
+        #starr-pi-editor-popup, #starr-violation-warning { position: relative; }
+        .starr-minimize-sub-button {
+            position: absolute; top: 10px; right: 10px; background: #e0e0e0; color: #555;
+            border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 16px;
+            font-weight: bold; line-height: 20px; text-align: center; cursor: pointer; z-index: 10;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+        .starr-minimize-sub-button:hover { transform: scale(1.1); background-color: #d0d0d0; }
+        .dark-mode .starr-minimize-sub-button { background: #5a5a5a; color: #e0e0e0; }
+        .dark-mode .starr-minimize-sub-button:hover { background-color: #6a6a6a; }
         #starr-pi-editor-popup h4 { text-align: center; margin: 0 0 5px 0; color: var(--starr-header-color); }
         #starr-pi-editor-popup p { text-align: center; margin: 0 0 10px 0; font-size: 14px; }
         #starr-pi-editor-list {
@@ -592,6 +604,7 @@
     const piEditorPopup = document.createElement("div");
     piEditorPopup.id = "starr-pi-editor-popup";
     piEditorPopup.innerHTML = `
+        <button class="starr-minimize-sub-button" id="starr-pi-minimize-button" title="Minimize (Ctrl+Tab)">−</button>
         <h4>Detected Personal Info</h4>
         <p>Check items to log. You can also edit the text.</p>
         <div id="starr-pi-editor-list"></div>
@@ -606,6 +619,7 @@
     violationWarningOverlay.id = "starr-violation-warning-overlay";
     violationWarningOverlay.innerHTML = `
         <div id="starr-violation-warning">
+            <button class="starr-minimize-sub-button" id="starr-violation-minimize-button" title="Minimize (Ctrl+Shift+M)">−</button>
             <div id="violation-title">⚠️ Rule Violation Detected!</div>
             <p id="violation-reason"></p>
             <div id="violation-buttons">
@@ -662,6 +676,9 @@
     const mismatchSection = document.getElementById('mismatch-section');
     const mismatchRetryButton = document.getElementById('mismatch-retry-button');
     const multiResponseToggle = document.getElementById('multi-response-toggle');
+    const piMinimizeButton = document.getElementById('starr-pi-minimize-button');
+    const violationMinimizeButton = document.getElementById('starr-violation-minimize-button');
+
 
     let conversationHistory = [];
     let selectedReplyIndex = -1;
@@ -1389,6 +1406,7 @@
                         const reasonText = finalResult.issues.map(issue => issue.reason).join('; ');
                         violationReason.textContent = reasonText || "A policy violation was detected.";
                         violationWarningOverlay.style.display = 'flex';
+                        isViolationMinimized = false; // Ensure it's not considered minimized when shown
                         violationSound.play().catch(e => console.error("Violation alarm playback failed:", e));
                     } else {
                         pasteIntoSiteChat(textUnderScrutiny);
@@ -1412,7 +1430,8 @@
     // --- All UI Listeners and Initialization ---
     // (This part of the script remains largely unchanged, as it's UI-focused)
     function displaySummary(summaryText) { const box = document.getElementById('starr-summary-box'); if (box && summaryContainer) { summaryContainer.style.display = 'flex'; box.innerHTML = `<strong>Summary:</strong> ${summaryText}`; } }
-    function displayAiPiNotification(piText) { if (piEditorPopup && piEditorList) { piEditorList.innerHTML = ''; piText.split('\n').filter(line => line.trim()).forEach(line => { const itemDiv = document.createElement('div'); itemDiv.className = 'starr-pi-item'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; const textInput = document.createElement('input'); textInput.type = 'text'; textInput.value = `| ${line.trim()}`; itemDiv.appendChild(checkbox); itemDiv.appendChild(textInput); piEditorList.appendChild(itemDiv); }); piEditorPopup.style.display = 'flex'; piSound.play().catch(e => console.error("PI Sound failed:", e)); } }
+    function displayAiPiNotification(piText) { if (piEditorPopup && piEditorList) { piEditorList.innerHTML = ''; piText.split('\n').filter(line => line.trim()).forEach(line => { const itemDiv = document.createElement('div'); itemDiv.className = 'starr-pi-item'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; const textInput = document.createElement('input'); textInput.type = 'text'; textInput.value = `| ${line.trim()}`; itemDiv.appendChild(checkbox); itemDiv.appendChild(textInput); piEditorList.appendChild(itemDiv); }); piEditorPopup.style.display = 'flex'; isPiEditorMinimized = false; // Ensure it's not considered minimized when shown
+ piSound.play().catch(e => console.error("PI Sound failed:", e)); } }
     function setupSpicyRegenModes() { const container = document.getElementById('spicy-regen-container'); if (!container) return; container.innerHTML = ''; const dropdownContainer = document.createElement('div'); dropdownContainer.className = 'spicy-regen-dropdown'; const mainButton = document.createElement('button'); mainButton.innerHTML = '▼'; mainButton.className = 'spicy-regen-main-button'; const dropdownContent = document.createElement('div'); dropdownContent.className = 'spicy-regen-dropdown-content'; const modes = [ { label: '❤️ Sweet', tone: 'sweet' }, { label: '🔥 Naughty', tone: 'naughty' }, { label: '↩️ Deflect', tone: 'deflect' }, { label: '😈 Savage', tone: 'savage' }, { label: '😠 Sweetly Angry', tone: 'sweetly_angry' }]; modes.forEach(mode => { const link = document.createElement('a'); link.innerHTML = mode.label; link.href = '#'; link.addEventListener('click', (e) => { e.preventDefault(); if (conversationHistory.length === 0) { alert("Nothing to regenerate, baby."); return; } const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user'); if (!lastUserMessage) { alert("Couldn't find a user message to regenerate from."); return; } conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant'); fetchResponses(lastUserMessage.content, mode.tone); dropdownContent.style.display = 'none'; }); dropdownContent.appendChild(link); }); dropdownContainer.appendChild(mainButton); dropdownContainer.appendChild(dropdownContent); container.appendChild(dropdownContainer); mainButton.addEventListener('click', () => { dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block'; }); window.addEventListener('click', (event) => { if (!dropdownContainer.contains(event.target)) { dropdownContent.style.display = 'none'; } }); }
     function applyTheme(themeName) { const themeClasses = Object.values(AUTO_THEME_MAP).concat(['theme-warning-orange', 'theme-emergency-red']).filter(t => t !== 'bubblegum').map(t => t.startsWith('theme-') ? t : 'theme-' + t); document.documentElement.classList.remove(...themeClasses, 'theme-bubblegum'); if (themeName && themeName !== 'bubblegum' && !themeName.startsWith('theme-')) themeName = 'theme-' + themeName; if (themeName && themeName !== 'theme-bubblegum') document.documentElement.classList.add(themeName); }
     function updateThemeBasedOnTime() { if (!isAutoThemeEnabled) return; const timePeriod = getTimeOfDay(); const themeToSet = AUTO_THEME_MAP[timePeriod] || 'bubblegum'; applyTheme(themeToSet); GM_setValue('starr_current_theme', themeToSet); }
@@ -1447,16 +1466,145 @@
     stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
     uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
     themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
-    piScanButton.addEventListener('click', () => { const message = getLatestMessage(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
-    piLogCloseButton.addEventListener('click', () => { const items = []; piEditorList.querySelectorAll('.starr-pi-item').forEach(item => { const cb = item.querySelector('input[type="checkbox"]'); const ti = item.querySelector('input[type="text"]'); if (cb?.checked && ti) items.push(ti.value); }); let msg = "No items selected."; if (items.length > 0) { const text = items.join('\n'); GM_setClipboard(text, 'text'); const logbook = pasteIntoLogbook(text); if (logbook) { msg = "Logged & Copied!"; const saveBtn = logbook.closest('form')?.querySelector('button[type="submit"]'); if (saveBtn) { setTimeout(() => { saveBtn.click(); GM_notification({ text: "PI notes saved!", timeout: 5000, title: "Starr Logbook" }); }, 250); msg = "Saving..."; } else { GM_notification({ text: "Pasted, but couldn't find Save button.", timeout: 6000, title: "Starr Logbook" }); } } else msg = "Copied (Logbook not found)!"; } const originalText = piLogCloseButton.textContent; piLogCloseButton.textContent = msg; piLogCloseButton.disabled = true; setTimeout(() => { piLogCloseButton.textContent = originalText; piLogCloseButton.disabled = false; piEditorPopup.style.display = 'none'; }, 1500); });
+
+    piScanButton.addEventListener('click', () => {
+        const message = getLatestMessage();
+        if (!message) {
+            alert("No message to scan.");
+            return;
+        }
+
+        const customerNameEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId);
+        const customerName = customerNameEl ? customerNameEl.textContent.trim() : null;
+
+        if (customerName) {
+            const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const firstName = customerName.split(' ')[0];
+            const regex = new RegExp(`my name is\\s+${escapeRegExp(firstName)}`, 'i');
+
+            if (regex.test(message)) {
+                const matchText = message.match(regex)[0];
+                displayAiPiNotification(matchText);
+                return;
+            }
+        }
+        scanMessageForPI(message);
+    });
+
+    piLogCloseButton.addEventListener('click', () => {
+        const items = [];
+        piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
+            const cb = item.querySelector('input[type="checkbox"]');
+            const ti = item.querySelector('input[type="text"]');
+            if (cb?.checked && ti?.value) {
+                items.push(ti.value);
+            }
+        });
+        let msg = "No items selected.";
+        if (items.length > 0) {
+            const textToLog = items.join('\n');
+            GM_setClipboard(textToLog, 'text');
+            const logbookTextarea = document.querySelector('textarea[aria-label="member-note-message"]');
+            if (logbookTextarea) {
+                const currentVal = logbookTextarea.value;
+                logbookTextarea.value = currentVal ? `${currentVal}\n${textToLog}` : textToLog;
+                logbookTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                logbookTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+                const form = logbookTextarea.closest('form');
+                let saveBtn = null;
+                if (form) {
+                    const candidateButtons = Array.from(form.querySelectorAll('div.col-auto button.btn.btn-secondary'));
+                    saveBtn = candidateButtons.find(btn => btn.textContent.trim().toLowerCase() === 'save');
+                }
+                if (saveBtn) {
+                    msg = "Saving...";
+                    setTimeout(() => {
+                        saveBtn.click();
+                        GM_notification({ text: "PI notes saved to customer log!", timeout: 5000, title: "Starr Logbook" });
+                    }, 250);
+                } else {
+                    msg = "Copied (Save btn not found)!";
+                    GM_notification({ text: "Pasted to logbook, but could not find the specific Save button to click.", timeout: 6000, title: "Starr Logbook" });
+                }
+            } else {
+                msg = "Copied (Customer logbook not found)!";
+            }
+        }
+        const originalText = piLogCloseButton.textContent;
+        piLogCloseButton.textContent = msg;
+        piLogCloseButton.disabled = true;
+        setTimeout(() => {
+            piLogCloseButton.textContent = originalText;
+            piLogCloseButton.disabled = false;
+            piEditorPopup.style.display = 'none';
+        }, 1500);
+    });
+
     piCloseButton.addEventListener('click', () => { piEditorPopup.style.display = 'none'; });
     violationEditButton.addEventListener('click', () => { pasteIntoSiteChat(textUnderScrutiny); conversationHistory.push({ role: "assistant", content: textUnderScrutiny }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
     violationRegenerateButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; document.getElementById('starr-regenerate').click(); });
     violationWarningOverlay.addEventListener('click', (e) => { if (e.target === violationWarningOverlay) violationWarningOverlay.style.display = 'none'; });
     violationElVioButton.addEventListener('click', () => { let repaired = textUnderScrutiny.replace(/[-!:;*]/g, m => ({'-':' ', '!':'.', ':':'...', ';':','}[m] || '')).replace(/\s{2,}/g, ' ').trim(); pasteIntoSiteChat(repaired); conversationHistory.push({ role: "assistant", content: repaired }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
     mismatchRetryButton.addEventListener('click', () => { idMismatchActive = false; mismatchSection.style.display = 'none'; initializeStarrPopup(); });
+    piMinimizeButton.addEventListener('click', () => { piEditorPopup.style.display = 'none'; isPiEditorMinimized = true; });
+    violationMinimizeButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; isViolationMinimized = true; });
+
     async function applySavedUIPreferences() { darkModeToggle.checked = GM_getValue('starr_dark_mode', false); if (darkModeToggle.checked) document.documentElement.classList.add("dark-mode"); sendButtonGlowToggle.checked = GM_getValue('starr_send_button_glow', true); starrSendButton.classList.toggle("glow", sendButtonGlowToggle.checked); summaryToggle.checked = GM_getValue('starr_summary_enabled', true); piScanToggle.checked = GM_getValue('starr_pi_scan_enabled', true); piScanButton.style.display = piScanToggle.checked ? 'flex' : 'none'; timerWarningToggle.checked = GM_getValue('starr_timer_warning_enabled', true); isTimerWarningEnabled = timerWarningToggle.checked; multiResponseToggle.checked = await GM_getValue('starr_multi_response', false); voiceReplyToggle.checked = GM_getValue('starr_voice_reply', true); regexCheckerToggle.checked = GM_getValue('starr_regex_checker_enabled', true); llmCheckerToggle.checked = GM_getValue('starr_llm_checker_enabled', false); modelEngineSelect.value = await GM_getValue('starr_engine', 'zinat'); stylishButtonToggle.checked = GM_getValue('starr_stylish_button', true); button.classList.toggle("animated", stylishButtonToggle.checked); const savedUiMode = await GM_getValue('starr_ui_mode', 'landscape'); uiModeSelect.value = savedUiMode; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(savedUiMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); isAutoThemeEnabled = await GM_getValue('starr_auto_theme_enabled', false); autoThemeToggle.checked = isAutoThemeEnabled; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); }
-    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
+    document.addEventListener('keydown', (e) => {
+        const isCtrl = e.ctrlKey || e.metaKey;
+
+        if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') {
+            e.preventDefault();
+            if (violationWarningOverlay.style.display === 'flex') {
+                violationWarningOverlay.style.display = 'none';
+                isViolationMinimized = true;
+            } else if (isViolationMinimized) {
+                violationWarningOverlay.style.display = 'flex';
+                isViolationMinimized = false;
+            }
+            return;
+        }
+
+        if (violationWarningOverlay.style.display === 'flex') {
+            if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; }
+            else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); }
+            else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); }
+            else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); }
+            return;
+        }
+
+        if (isCtrl && e.key === 'Tab') {
+            e.preventDefault();
+            if (piEditorPopup.style.display === 'flex') {
+                piEditorPopup.style.display = 'none';
+                isPiEditorMinimized = true;
+            } else if (isPiEditorMinimized) {
+                piEditorPopup.style.display = 'flex';
+                isPiEditorMinimized = false;
+            }
+            return;
+        }
+
+        if (piEditorPopup.style.display === 'flex') {
+            if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; }
+            return;
+        }
+
+        if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; }
+        if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; }
+        if (!isCtrl && e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; }
+        if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; }
+        if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; }
+        if (!popup.classList.contains('visible')) return;
+        if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; }
+        if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; }
+        if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; }
+        if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; }
+        const replies = starrResponses.querySelectorAll('.starr-reply');
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; }
+        if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } }
+    });
+
     async function init() { await applySavedUIPreferences(); setupSpicyRegenModes(); updateButtonIcons(); button.addEventListener("click", async () => { unlockAudio(); const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false); const savedUiMode = await GM_getValue('starr_ui_mode', null); if (!hasSeenWelcome) { await displayWelcomeScreen(); } else if (!savedUiMode) { await displayModeSelection(); } else { initializeStarrPopup(); } }); await starrAutoCheckOnLoad(); }
     function unlockAudio() { if (isAudioUnlocked) return; console.log("Starr: Unlocking audio..."); [warningSound, emergencySound, piSound, violationSound].forEach(sound => { const p = sound.play(); if (p) { p.then(() => { sound.pause(); sound.currentTime = 0; }).catch(e => {}); } }); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(' '); window.speechSynthesis.speak(u); } isAudioUnlocked = true; }
     
