@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       8.8.0 // Logic decoupled, Summarizer models added
+// @version       8.8.1 // Toggle bug fixed
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -869,12 +869,12 @@
         document.getElementById('mode-landscape').onclick = async () => {
             document.body.classList.remove('ui-portrait'); document.body.classList.add('ui-landscape');
             await GM_setValue('starr_ui_mode', 'landscape');
-            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove(); initializeStarrPopup();
+            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
         };
         document.getElementById('mode-portrait').onclick = async () => {
             document.body.classList.remove('ui-landscape'); document.body.classList.add('ui-portrait');
             await GM_setValue('starr_ui_mode', 'portrait');
-            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove(); initializeStarrPopup();
+            updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
         };
     }
 
@@ -1515,8 +1515,7 @@
         if (!checkers.regex && !checkers.llm) {
             pasteIntoSiteChat(textUnderScrutiny);
             conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
-            popup.classList.remove('visible');
-            setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300);
+            togglePopup(false);
             return;
         }
 
@@ -1541,8 +1540,7 @@
                     } else {
                         pasteIntoSiteChat(textUnderScrutiny);
                         conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
-                        popup.classList.remove('visible');
-                        setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300);
+                        togglePopup(false);
                     }
                 } else {
                     alert('Violation check failed. See console for details.');
@@ -1569,8 +1567,8 @@
     async function handleManualConeIdSubmit() { unlockAudio(); const enteredConeId = coneIdInput.value.trim(); if (!enteredConeId) { starrSetMessage('CONE ID cannot be empty.'); return; } const uiConeId = getLoggedInConeId(); if (uiConeId && enteredConeId !== uiConeId) { starrSetMessage("The CONE ID you entered doesn't match the one on the site.", true); idMismatchActive = true; updatePopupUI(true); return; } starrSetMessage("Checking subscription... hold on.", false); await GM_setValue('user_cone_id', enteredConeId); storedUserConeId = enteredConeId; await checkConeStatusAndAct(enteredConeId, true, true); }
     submitConeIdButton.addEventListener("click", handleManualConeIdSubmit);
     coneIdInput.addEventListener("keydown", async (e) => { if (e.key === "Enter") { e.preventDefault(); await handleManualConeIdSubmit(); } });
-    document.getElementById("starr-close").addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); popup.classList.remove('settings-open'); const newHistory = buildFullConversationHistory(); if (newHistory.length > 0) lastProcessedMessageText = newHistory[newHistory.length - 1].content; isUIPopulated = false; });
-    minimizeButton.addEventListener("click", () => { popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
+    document.getElementById("starr-close").addEventListener("click", () => togglePopup(false));
+    minimizeButton.addEventListener("click", () => togglePopup(false));
     document.getElementById("starr-force-key").addEventListener("click", () => { GM_setValue("starr_openrouter_api_key", null); alert("API key cleared. You will be prompted for a new one on next use."); starrResponses.innerHTML = '<div class="starr-reply">API key cleared. Try again.</div>'; });
     function pasteIntoSiteChat(text) { const cleanedText = text.replace(/\s*Copy\s*$/, ''); const input = document.querySelector(REPLY_INPUT_SELECTOR); if (input) { input.focus(); input.value = cleanedText; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); input.focus(); } else { GM_notification({ text: `Could not auto-paste. Check selector: ${REPLY_INPUT_SELECTOR}`, timeout: 5000, title: "Starr Warning" }); } }
     starrResponses.addEventListener("click", handleReplyClick);
@@ -1684,8 +1682,33 @@
         autoThemeToggle.checked = isAutoThemeEnabled;
         if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(await GM_getValue('starr_current_theme', 'bubblegum'));
     }
-    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } if (isCtrl && e.key === 'Tab') { const piModal = document.getElementById('starr-pi-editor-popup'); if (piModal) piModal.classList.toggle('modal-minimized'); e.preventDefault(); } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); if (popup.classList.contains('visible')) minimizeButton.click(); else button.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') { const violationModal = document.getElementById('starr-violation-warning'); if (violationModal) violationModal.classList.toggle('modal-minimized'); } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
-    async function init() { await applySavedUIPreferences(); setupSpicyRegenModes(); updateButtonIcons(); button.addEventListener("click", async () => { unlockAudio(); const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false); const savedUiMode = await GM_getValue('starr_ui_mode', null); if (!hasSeenWelcome) { await displayWelcomeScreen(); } else if (!savedUiMode) { await displayModeSelection(); } else { initializeStarrPopup(); } }); await starrAutoCheckOnLoad(); }
+    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } if (isCtrl && e.key === 'Tab') { const piModal = document.getElementById('starr-pi-editor-popup'); if (piModal) piModal.classList.toggle('modal-minimized'); e.preventDefault(); } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); togglePopup(!popup.classList.contains('visible')); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') { const violationModal = document.getElementById('starr-violation-warning'); if (violationModal) violationModal.classList.toggle('modal-minimized'); } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
+    function togglePopup(show) {
+    if (show) {
+        // To show: first make it a flex container, then trigger the animation.
+        popup.style.setProperty('display', 'flex', 'important');
+        requestAnimationFrame(() => {
+            popup.classList.add('visible');
+            if (!isUIPopulated) {
+                 initializeStarrPopup();
+                 isUIPopulated = true;
+            }
+        });
+    } else {
+        // To hide: trigger the animation, then hide it completely after the animation finishes.
+        popup.classList.remove('visible');
+        setTimeout(() => {
+            popup.style.setProperty('display', 'none', 'important');
+        }, 300); // 300ms matches the CSS transition time
+    }
+}
+    async function init() {
+        await applySavedUIPreferences();
+        setupSpicyRegenModes();
+        updateButtonIcons();
+        button.addEventListener("click", () => togglePopup(true));
+        await starrAutoCheckOnLoad();
+    }
     function unlockAudio() { if (isAudioUnlocked) return; console.log("Starr: Unlocking audio..."); [warningSound, emergencySound, piSound, violationSound].forEach(sound => { const p = sound.play(); if (p) { p.then(() => { sound.pause(); sound.currentTime = 0; }).catch(e => {}); } }); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(' '); window.speechSynthesis.speak(u); } isAudioUnlocked = true; }
 
     document.getElementById("starr-send").addEventListener("click", () => {
@@ -1697,35 +1720,38 @@
 
     // --- START OF MERGED FIX: ENHANCED EL-VIO LOGIC ---
     function handleElVioButtonClick(replyText) {
-    let cleaned = replyText.replace(/[^\w\s.,?!']/g, '');
+        // This single, corrected regex removes any character that is NOT a word character (\w),
+        // whitespace (\s), or one of the allowed punctuations (.,?!').
+        // Crucially, the apostrophe (') is now correctly preserved for contractions.
+        // Unwanted characters like double quotes ("), dashes (-), etc., are still removed.
+        let cleaned = replyText.replace(/[^\w\s.,?!']/g, '');
 
-    // This comprehensive list of forbidden phrases remains the same.
-    const forbiddenWordsAndPhrases = [
-        "sends shivers down my spine", "tingle", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
-        "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
-        "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
-        "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
-        "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
-    ];
+        // This comprehensive list of forbidden phrases remains the same.
+        const forbiddenWordsAndPhrases = [
+            "sends shivers down my spine", "tingle", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
+            "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
+            "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
+            "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
+            "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
+        ];
 
-    forbiddenWordsAndPhrases.forEach(phrase => {
-        // Use a regex that matches the phrase as a whole word or surrounded by non-alphanumeric characters
-        const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-        cleaned = cleaned.replace(regex, ' ');
-    });
+        forbiddenWordsAndPhrases.forEach(phrase => {
+            // Use a regex that matches the phrase as a whole word or surrounded by non-alphanumeric characters
+            const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+            cleaned = cleaned.replace(regex, ' ');
+        });
 
-    // Clean up extra spaces that might result from replacements
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    return cleaned;
-}
+        // Clean up extra spaces that might result from replacements
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        return cleaned;
+    }
     violationElVioButton.addEventListener('click', () => {
         const repaired = handleElVioButtonClick(textUnderScrutiny);
 
         pasteIntoSiteChat(repaired);
         conversationHistory.push({ role: "assistant", content: repaired });
         violationWarningOverlay.style.display = 'none';
-        popup.classList.remove('visible');
-        setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300);
+        togglePopup(false);
     });
     // --- END OF MERGED FIX ---
 
