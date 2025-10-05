@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       8.8.1 // Toggle bug fixed
+// @version       9.0.0 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -603,6 +603,7 @@
 
                 <h4 class="settings-section-header">Feature Settings</h4>
                 <label> <input type="checkbox" id="multi-response-toggle"> Enable Multi-Response Mode </label>
+                <label> <input type="checkbox" id="strict-length-toggle"> Enforce Strict Message Length Matching </label>
                 <label> <input type="checkbox" id="pi-scan-toggle" checked> Show PI Scan Button </label>
                 <label> <input type="checkbox" id="summary-toggle" checked> Enable Summary for Long Messages </label>
                 <div class="model-switcher" style="margin-top: 10px;">
@@ -724,6 +725,7 @@
     const mismatchSection = document.getElementById('mismatch-section');
     const mismatchRetryButton = document.getElementById('mismatch-retry-button');
     const multiResponseToggle = document.getElementById('multi-response-toggle');
+    const strictLengthToggle = document.getElementById('strict-length-toggle');
 
     let conversationHistory = [];
     let selectedReplyIndex = -1;
@@ -1368,45 +1370,56 @@
     }
 
     async function scanMessageForPI(text) {
-        const apiKey = GM_getValue("starr_openrouter_api_key", null);
-        if (!apiKey) { alert("Cannot scan for PI without an API key."); return; }
-
-        const originalContent = piScanButton.textContent;
-        piScanButton.textContent = '⏳'; piScanButton.disabled = true;
-
-        GM_xmlhttpRequest({
-            method: "POST", url: STARR_BACKEND_URL,
-            headers: { "Content-Type": "application/json" },
-            data: JSON.stringify({
-                action: 'scan_pi',
-                apiKey,
-                textToScan: text,
-                preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
-            }),
-            onload: (res) => {
-                if (res.status >= 200 && res.status < 300) {
-                    const data = JSON.parse(res.responseText);
-                    const result = data.pi;
-                    if (result && result.toUpperCase().trim() !== 'NONE') {
-                        displayAiPiNotification(result);
-                    } else {
-                        GM_notification({ text: "The intelligent scan found no new personal information.", timeout: 3000, title: "Starr PI Scan" });
-                    }
-                } else {
-                     alert(`Starr: The intelligent PI scan failed. Server responded with status ${res.status}.`);
-                }
-            },
-            onerror: (err) => {
-                console.error("Starr: AI PI Scan failed:", err);
-                alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
-            },
-            onfinally: () => {
-                piScanButton.textContent = originalContent; piScanButton.disabled = false;
-            }
-        });
+    const apiKey = GM_getValue("starr_openrouter_api_key", null);
+    if (!apiKey) {
+        alert("Cannot scan for PI without an API key.");
+        return;
     }
 
-    async function fetchResponses(input, tone = 'plain') {
+    const originalContent = piScanButton.textContent;
+    piScanButton.textContent = '⏳';
+    piScanButton.disabled = true;
+
+    GM_xmlhttpRequest({
+        method: "POST",
+        url: STARR_BACKEND_URL,
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify({
+            action: 'scan_pi',
+            apiKey,
+            textToScan: text,
+            preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
+        }),
+        onload: (res) => {
+            if (res.status >= 200 && res.status < 300) {
+                const data = JSON.parse(res.responseText);
+                const result = data.pi;
+                if (result && result.toUpperCase().trim() !== 'NONE') {
+                    displayAiPiNotification(result);
+                } else {
+                    GM_notification({ text: "The intelligent scan found no new personal information.", timeout: 3000, title: "Starr PI Scan" });
+                }
+                // **THE FIX:** Reset button on successful scan, regardless of result.
+                piScanButton.textContent = originalContent;
+                piScanButton.disabled = false;
+            } else {
+                alert(`Starr: The intelligent PI scan failed. Server responded with status ${res.status}.`);
+                // Reset button on server-side errors.
+                piScanButton.textContent = originalContent;
+                piScanButton.disabled = false;
+            }
+        },
+        onerror: (err) => {
+            console.error("Starr: AI PI Scan failed:", err);
+            alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
+            // Reset button on network errors.
+            piScanButton.textContent = originalContent;
+            piScanButton.disabled = false;
+        }
+    });
+}
+
+    async function fetchResponses(input, tone = 'plain', regenerationFocus = null) {
         if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
 
         let apiKey = GM_getValue("starr_openrouter_api_key", null);
@@ -1447,6 +1460,23 @@
             preferredEngine: await GM_getValue('starr_engine', 'zinat')
         };
 
+        const isStrictLength = await GM_getValue('starr_strict_length', false);
+        if (isStrictLength) {
+            const lastUserMessages = [];
+            for (let i = conversationHistory.length - 1; i >= 0; i--) {
+                if (conversationHistory[i].role === 'user') {
+                    lastUserMessages.unshift(conversationHistory[i].content);
+                } else {
+                    break; // Stop when we hit the last AI message
+                }
+            }
+            payload.userMessageLength = lastUserMessages.join(' ').length;
+        }
+
+        if (regenerationFocus) {
+            payload.regenerationFocus = regenerationFocus;
+        }
+
         GM_xmlhttpRequest({
             method: "POST",
             url: STARR_BACKEND_URL,
@@ -1461,16 +1491,17 @@
 
                     starrResponses.innerHTML = "";
 
-                    // NOTE: All post-processing logic has been removed from here.
-                    // The backend prompt is now solely responsible for generating clean, compliant output.
-
                     replies.forEach(replyText => {
                         if (!replyText) return; // Skip empty replies
+
+                        // Failsafe client-side cleaning for the stubborn phrase
+                        const manWhoAlternatives = ["It's so hot when a man", "I'm really into a man", "It's a huge turn-on when a man"];
+                        let cleanedReply = replyText.replace(/\bI love a man\b/gi, () => manWhoAlternatives[Math.floor(Math.random() * manWhoAlternatives.length)]);
 
                         // Create the reply element
                         const div = document.createElement("div");
                         div.className = "starr-reply";
-                        div.textContent = replyText;
+                        div.textContent = cleanedReply;
                         starrResponses.appendChild(div);
                     });
 
@@ -1572,7 +1603,55 @@
     document.getElementById("starr-force-key").addEventListener("click", () => { GM_setValue("starr_openrouter_api_key", null); alert("API key cleared. You will be prompted for a new one on next use."); starrResponses.innerHTML = '<div class="starr-reply">API key cleared. Try again.</div>'; });
     function pasteIntoSiteChat(text) { const cleanedText = text.replace(/\s*Copy\s*$/, ''); const input = document.querySelector(REPLY_INPUT_SELECTOR); if (input) { input.focus(); input.value = cleanedText; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); input.focus(); } else { GM_notification({ text: `Could not auto-paste. Check selector: ${REPLY_INPUT_SELECTOR}`, timeout: 5000, title: "Starr Warning" }); } }
     starrResponses.addEventListener("click", handleReplyClick);
-    async function pollForNewMessages() { checkSubscriptionWarning(); const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId); const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null; if (newCustomerId && newCustomerId !== currentCustomerId) { console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`); currentCustomerId = newCustomerId; conversationHistory = []; lastProcessedMessageText = ''; starrResponses.innerHTML = ''; if (summaryContainer) summaryContainer.style.display = 'none'; } const uiConeId = getLoggedInConeId(); if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) { isAuthorized = false; storedUserConeId = null; isUIPopulated = false; idMismatchActive = true; await GM_setValue('user_cone_id', null); await GM_setValue('starr_subscription_status', null); starrSetMessage(''); updatePopupUI(true); return; } if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return; const newHistory = buildFullConversationHistory(); if (newHistory.length > 0) { const latestMessage = newHistory[newHistory.length - 1]; if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) { lastProcessedMessageText = latestMessage.content; conversationHistory = newHistory; if (conversationHistory.filter(m => m.role === 'user').length === 1) updateThemeBasedOnTime(); detectAndNotifyPI(latestMessage.content, 'Customer'); checkAndSummarize(); popup.style.setProperty('display', 'flex', 'important'); requestAnimationFrame(() => popup.classList.add('visible')); updatePopupUI(true); starrInput.value = latestMessage.content; starrInput.focus(); try { await fetchResponses(latestMessage.content); } catch (error) { console.error("Starr: Error in automatic message processing:", error); } } } }
+    async function pollForNewMessages() {
+    checkSubscriptionWarning();
+    const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId);
+    const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null;
+    if (newCustomerId && newCustomerId !== currentCustomerId) {
+        console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`);
+        currentCustomerId = newCustomerId;
+        conversationHistory = [];
+        lastProcessedMessageText = '';
+        starrResponses.innerHTML = '';
+        if (summaryContainer) summaryContainer.style.display = 'none';
+    }
+    const uiConeId = getLoggedInConeId();
+    if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) {
+        isAuthorized = false;
+        storedUserConeId = null;
+        isUIPopulated = false;
+        idMismatchActive = true;
+        await GM_setValue('user_cone_id', null);
+        await GM_setValue('starr_subscription_status', null);
+        starrSetMessage('');
+        updatePopupUI(true);
+        return;
+    }
+    if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
+    const newHistory = buildFullConversationHistory();
+    if (newHistory.length > 0) {
+        const latestMessage = newHistory[newHistory.length - 1];
+        if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) {
+            lastProcessedMessageText = latestMessage.content;
+            conversationHistory = newHistory;
+            if (conversationHistory.filter(m => m.role === 'user').length === 1) {
+                updateThemeBasedOnTime();
+            }
+            detectAndNotifyPI(latestMessage.content, 'Customer');
+            checkAndSummarize();
+
+            popup.style.setProperty('display', 'flex', 'important'); requestAnimationFrame(() => popup.classList.add('visible')); updatePopupUI(true);
+
+            starrInput.value = getUnansweredUserMessages();
+            starrInput.focus();
+            try {
+                await fetchResponses(getUnansweredUserMessages());
+            } catch (error) {
+                console.error("Starr: Error in automatic message processing:", error);
+            }
+        }
+    }
+}
     setInterval(pollForNewMessages, 1000);
     let currentTimerState = 'normal'; function pollForTimer() { if (!isTimerWarningEnabled || !popup.classList.contains('visible')) { if (currentTimerState !== 'normal') resetTimerState(); return; } const timerElement = document.querySelector(TIMER_WARNING_CONFIG.selector); if (!timerElement) { if (currentTimerState !== 'normal') resetTimerState(); return; } const [minutes, seconds] = timerElement.textContent.trim().split(':').map(Number); const totalSeconds = (minutes * 60) + seconds; if (totalSeconds <= 0) { if (currentTimerState !== 'normal') { resetTimerState(); document.getElementById('starr-close').click(); } } else if (totalSeconds <= 60) { if (currentTimerState !== 'emergency') { currentTimerState = 'emergency'; applyTheme('emergency-red'); starrHeader.innerHTML = "⚠️ REPLY NOW! ⚠️"; warningSound.pause(); emergencySound.play().catch(e => console.error("Emergency sound failed:", e.name)); } } else if (totalSeconds <= 120) { if (currentTimerState !== 'warning') { currentTimerState = 'warning'; applyTheme('warning-orange'); starrHeader.innerHTML = "⚠️ Message time running out..."; emergencySound.pause(); warningSound.play().catch(e => console.error("Warning sound failed:", e.name)); } } else { if (currentTimerState !== 'normal') resetTimerState(); } }
     function resetTimerState() { warningSound.pause(); emergencySound.pause(); warningSound.currentTime = 0; emergencySound.currentTime = 0; starrHeader.innerHTML = "Talk to Starr, baby💦..."; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); currentTimerState = 'normal'; }
@@ -1591,23 +1670,24 @@
     summarizerEngineSelect.addEventListener('change', () => GM_setValue('starr_summarizer_engine', summarizerEngineSelect.value));
     multiResponseToggle.addEventListener("change", () => GM_setValue('starr_multi_response', multiResponseToggle.checked));
     stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
+    strictLengthToggle.addEventListener("change", () => GM_setValue('starr_strict_length', strictLengthToggle.checked));
     uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
     themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
     piScanButton.addEventListener('click', () => { const message = getUnansweredUserMessages(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
 
     piLogCloseButton.addEventListener('click', () => {
-        const items = [];
-        piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
-            const cb = item.querySelector('input[type="checkbox"]');
-            const ti = item.querySelector('input[type="text"]');
-            if (cb?.checked && ti?.value) {
-                items.push(ti.value);
-            }
-        });
+    const items = [];
+    piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
+        const cb = item.querySelector('input[type="checkbox"]');
+        const ti = item.querySelector('input[type="text"]');
+        if (cb?.checked && ti?.value) {
+            items.push(ti.value);
+        }
+    });
 
-        let msg = "No items selected.";
+    let msg = "No items selected.";
 
-        if (items.length > 0) {
+    if (items.length > 0) {
             const textToLog = items.join('\n');
             GM_setClipboard(textToLog, 'text');
 
@@ -1642,16 +1722,32 @@
         }
 
         const originalText = piLogCloseButton.textContent;
-        piLogCloseButton.textContent = msg;
-        piLogCloseButton.disabled = true;
-        setTimeout(() => {
-            piLogCloseButton.textContent = originalText;
-            piLogCloseButton.disabled = false;
-            piEditorPopup.style.display = 'none';
-        }, 1500);
-    });
+    piLogCloseButton.textContent = msg;
+    piLogCloseButton.disabled = true;
 
-    piCloseButton.addEventListener('click', () => { piEditorPopup.style.display = 'none'; });
+    // THE FIX: Reset the main PI scan button
+    const piScanButton = document.getElementById('starr-pi-scan-button');
+    if (piScanButton) {
+        piScanButton.textContent = '♻️';
+        piScanButton.disabled = false;
+    }
+
+    setTimeout(() => {
+        piLogCloseButton.textContent = originalText;
+        piLogCloseButton.disabled = false;
+        piEditorPopup.style.display = 'none';
+    }, 1500);
+});
+
+    piCloseButton.addEventListener('click', () => {
+    piEditorPopup.style.display = 'none';
+    // THE FIX: Reset the main PI scan button
+    const piScanButton = document.getElementById('starr-pi-scan-button');
+    if (piScanButton) {
+        piScanButton.textContent = '♻️';
+        piScanButton.disabled = false;
+    }
+});
     violationEditButton.addEventListener('click', () => { pasteIntoSiteChat(textUnderScrutiny); conversationHistory.push({ role: "assistant", content: textUnderScrutiny }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
     violationRegenerateButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; document.getElementById('starr-regenerate').click(); });
     violationWarningOverlay.addEventListener('click', (e) => { if (e.target === violationWarningOverlay) violationWarningOverlay.style.display = 'none'; });
@@ -1667,6 +1763,7 @@
         timerWarningToggle.checked = await GM_getValue('starr_timer_warning_enabled', true);
         isTimerWarningEnabled = timerWarningToggle.checked;
         multiResponseToggle.checked = await GM_getValue('starr_multi_response', false);
+        strictLengthToggle.checked = await GM_getValue('starr_strict_length', false);
         voiceReplyToggle.checked = await GM_getValue('starr_voice_reply', true);
         regexCheckerToggle.checked = await GM_getValue('starr_regex_checker_enabled', true);
         llmCheckerToggle.checked = await GM_getValue('starr_llm_checker_enabled', false);
@@ -1706,7 +1803,18 @@
         await applySavedUIPreferences();
         setupSpicyRegenModes();
         updateButtonIcons();
-        button.addEventListener("click", () => togglePopup(true));
+        button.addEventListener("click", async () => {
+            unlockAudio();
+            const hasSeenWelcome = await GM_getValue('hasSeenWelcomePage', false);
+            const savedUiMode = await GM_getValue('starr_ui_mode', null);
+            if (!hasSeenWelcome) {
+                await displayWelcomeScreen();
+            } else if (!savedUiMode) {
+                await displayModeSelection();
+            } else {
+                togglePopup(true);
+            }
+        });
         await starrAutoCheckOnLoad();
     }
     function unlockAudio() { if (isAudioUnlocked) return; console.log("Starr: Unlocking audio..."); [warningSound, emergencySound, piSound, violationSound].forEach(sound => { const p = sound.play(); if (p) { p.then(() => { sound.pause(); sound.currentTime = 0; }).catch(e => {}); } }); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(' '); window.speechSynthesis.speak(u); } isAudioUnlocked = true; }
@@ -1720,31 +1828,34 @@
 
     // --- START OF MERGED FIX: ENHANCED EL-VIO LOGIC ---
     function handleElVioButtonClick(replyText) {
-        // This single, corrected regex removes any character that is NOT a word character (\w),
-        // whitespace (\s), or one of the allowed punctuations (.,?!').
-        // Crucially, the apostrophe (') is now correctly preserved for contractions.
-        // Unwanted characters like double quotes ("), dashes (-), etc., are still removed.
-        let cleaned = replyText.replace(/[^\w\s.,?!']/g, '');
+    // Step 1: Specific replacements (transplanted from Ts.js)
+    let cleaned = replyText
+        .replace(/-/g, ' ')
+        .replace(/!/g, '.')
+        .replace(/:/g, '...')
+        .replace(/;/g, '...');
 
-        // This comprehensive list of forbidden phrases remains the same.
-        const forbiddenWordsAndPhrases = [
-            "sends shivers down my spine", "tingle", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
-            "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
-            "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
-            "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
-            "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
-        ];
+    // Step 2: General cleanup for any other unwanted characters, preserving apostrophes.
+    cleaned = cleaned.replace(/[^\w\s.,?'’]/g, '');
 
-        forbiddenWordsAndPhrases.forEach(phrase => {
-            // Use a regex that matches the phrase as a whole word or surrounded by non-alphanumeric characters
-            const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-            cleaned = cleaned.replace(regex, ' ');
-        });
+    // This comprehensive list of forbidden phrases remains the same.
+    const forbiddenWordsAndPhrases = [
+        "sends shivers down my spine", "tingle", "Oh", "Mmm", "Damn", "incredibly", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
+        "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
+        "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
+        "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
+        "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
+    ];
 
-        // Clean up extra spaces that might result from replacements
-        cleaned = cleaned.replace(/\s+/g, ' ').trim();
-        return cleaned;
-    }
+    forbiddenWordsAndPhrases.forEach(phrase => {
+        const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+        cleaned = cleaned.replace(regex, ' ');
+    });
+
+    // Clean up any extra spaces created by the replacements.
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    return cleaned;
+}
     violationElVioButton.addEventListener('click', () => {
         const repaired = handleElVioButtonClick(textUnderScrutiny);
 
@@ -1756,14 +1867,47 @@
     // --- END OF MERGED FIX ---
 
     document.getElementById("starr-regenerate").addEventListener("click", () => {
-        if (conversationHistory.length === 0 && buildFullConversationHistory().length === 0) {
-            alert("Nothing to regenerate, baby."); return;
+    if (conversationHistory.length === 0) {
+        alert("Nothing to regenerate, baby.");
+        return;
+    }
+
+    // 1. Find the last block of consecutive user messages.
+    const lastUserMessages = [];
+    let fullHistory = buildFullConversationHistory(); // Always get the freshest history from the DOM
+    for (let i = fullHistory.length - 1; i >= 0; i--) {
+        if (fullHistory[i].role === 'user') {
+            lastUserMessages.unshift(fullHistory[i].content);
+        } else {
+            // We've hit the last AI message, so we stop.
+            break;
         }
-        conversationHistory = conversationHistory.filter(msg => msg.role !== 'assistant');
-        const lastMessageContent = conversationHistory.length > 0 ? conversationHistory[conversationHistory.length-1].content : getUnansweredUserMessages();
-        if (lastMessageContent) fetchResponses(lastMessageContent, 'plain');
-        else alert("Could not find a previous message to regenerate from.");
-    });
+    }
+
+    if (lastUserMessages.length === 0) {
+        alert("Could not find a user message to regenerate from.");
+        return;
+    }
+
+    // 2. Remove the last AI response(s) from the official history.
+    // This finds the index of the last user message and slices the history up to that point.
+    let lastUserIndex = -1;
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        if (conversationHistory[i].role === 'user') {
+            lastUserIndex = i;
+            break;
+        }
+    }
+    if (lastUserIndex !== -1) {
+        conversationHistory.splice(lastUserIndex + 1);
+    }
+
+    const regenerationText = lastUserMessages.join(' ');
+
+    // 3. Call fetchResponses with the special 'regenerationFocus' text.
+    fetchResponses(regenerationText, 'plain', regenerationText);
+});
+
 
     init();
 
