@@ -1106,72 +1106,91 @@
         }
     }
 
+    // 👇 PASTE THIS NEW, FASTER VERSION IN ITS PLACE
     async function checkConeStatusAndAct(coneId, forcePopupUpdate = false, isUserInitiated = false) {
-        if (!coneId) {
-             isAuthorized = false;
-             accessDeniedPermanent = false;
-             await GM_setValue('starr_subscription_status', null);
-             if (forcePopupUpdate) updatePopupUI(true);
-             return;
-        }
-        try {
-            const response = await new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "POST", url: VALIDATE_URL, headers: { "Content-Type": "application/json" },
-                    data: JSON.stringify({ cone_id: coneId }),
-                    onload: res => resolve(res), onerror: err => reject(err)
-                });
-            });
+    // NEW: Define how long to cache the authorization status (in milliseconds)
+    // 300000ms = 5 minutes
+    const CACHE_DURATION = 300000;
 
-            if (response.status < 200 || response.status >= 300) throw new Error("API Error");
-
-            const data = JSON.parse(response.responseText);
-            await GM_setValue('starr_subscription_status', data); // Cache the latest status
-            console.log("[validate-cone]", data);
-
-            const oldOverlay = document.getElementById('starr-block-overlay');
-            if (oldOverlay) oldOverlay.remove();
-            // removeRedWarningBar is handled by the polling checkSubscriptionWarning function
-            isAuthorized = false;
-            accessDeniedPermanent = false;
-
-            if (data.status === "active") {
-                isAuthorized = true;
-                starrSetMessage("✅ Subscription active. Welcome back!", false);
-                // The subscription warning bar is now handled exclusively by the checkSubscriptionWarning poll.
-                if(forcePopupUpdate) updatePopupUI(true);
-                return;
-            }
-
-            accessDeniedPermanent = true;
-
-            if (data.status === "debt") {
-                const bal = data.balance_due ?? 0;
-                starrSetMessage(`Omo you dey owe ₦${bal}. Balance up, no vex`);
-                if (isUserInitiated) {
-                    showBlockingUI(coneId, `Owe ₦${bal}`, "You need to clear this debt before you can subscribe again.", "CLEAR BALANCE", () => openPayModal(coneId, 'debt', 1, '', bal));
-                }
-            } else if (data.status === "expired" || data.status === "not_found") {
-                const msg = data.status === "expired"
-                    ? "Ogbeni pay money joor... Your sub don finish. You dey whine?"
-                    : "I don't know you yet, baby. Subscribe to register your Cone ID.";
-                starrSetMessage(msg);
-                if (isUserInitiated) {
-                    showBlockingUI(coneId, "Subscription Required", msg, "SUBSCRIBE", () => openPayModal(coneId, 'subscribe', 1, ''));
-                }
-            }
-        } catch (err) {
-            console.error("checkConeStatusAndAct err", err);
-            starrSetMessage("Error checking subscription. Try again later.");
-            accessDeniedPermanent = true;
-            await GM_setValue('starr_subscription_status', null);
-        } finally {
-             if (accessDeniedPermanent && forcePopupUpdate) {
-                updatePopupUI(true);
-             }
-        }
+    if (!coneId) {
+        isAuthorized = false;
+        accessDeniedPermanent = false;
+        await GM_setValue('starr_subscription_status', null);
+        if (forcePopupUpdate) updatePopupUI(true);
+        return;
     }
 
+    // NEW: Check for a valid, non-expired cached status first
+    const cachedStatus = await GM_getValue('starr_subscription_status', null);
+    const lastCheckTime = await GM_getValue('starr_last_auth_check_time', 0);
+
+    if (cachedStatus && (Date.now() - lastCheckTime < CACHE_DURATION) && !isUserInitiated) {
+        console.log("[StarrAuth] Using cached status.");
+        const data = cachedStatus;
+        isAuthorized = (data.status === "active");
+        accessDeniedPermanent = !isAuthorized;
+        if (forcePopupUpdate) updatePopupUI(true);
+        return; // IMPORTANT: Skip the network request
+    }
+
+    console.log("[StarrAuth] Cache expired or not found. Performing live network check...");
+    try {
+        const response = await new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "POST", url: VALIDATE_URL, headers: { "Content-Type": "application/json" },
+                data: JSON.stringify({ cone_id: coneId }),
+                onload: res => resolve(res), onerror: err => reject(err)
+            });
+        });
+
+        if (response.status < 200 || response.status >= 300) throw new Error("API Error");
+
+        const data = JSON.parse(response.responseText);
+        // NEW: Save the new status AND the current time to the cache
+        await GM_setValue('starr_subscription_status', data);
+        await GM_setValue('starr_last_auth_check_time', Date.now());
+        console.log("[validate-cone] Fetched and cached new status:", data);
+
+        const oldOverlay = document.getElementById('starr-block-overlay');
+        if (oldOverlay) oldOverlay.remove();
+        isAuthorized = false;
+        accessDeniedPermanent = false;
+
+        if (data.status === "active") {
+            isAuthorized = true;
+            starrSetMessage("✅ Subscription active. Welcome back!", false);
+            if(forcePopupUpdate) updatePopupUI(true);
+            return;
+        }
+
+        accessDeniedPermanent = true;
+
+        if (data.status === "debt") {
+            const bal = data.balance_due ?? 0;
+            starrSetMessage(`Omo you dey owe ₦${bal}. Balance up, no vex`);
+            if (isUserInitiated) {
+                showBlockingUI(coneId, `Owe ₦${bal}`, "You need to clear this debt before you can subscribe again.", "CLEAR BALANCE", () => openPayModal(coneId, 'debt', 1, '', bal));
+            }
+        } else if (data.status === "expired" || data.status === "not_found") {
+            const msg = data.status === "expired"
+                ? "Ogbeni pay money joor... Your sub don finish. You dey whine?"
+                : "I don't know you yet, baby. Subscribe to register your Cone ID.";
+            starrSetMessage(msg);
+            if (isUserInitiated) {
+                showBlockingUI(coneId, "Subscription Required", msg, "SUBSCRIBE", () => openPayModal(coneId, 'subscribe', 1, ''));
+            }
+        }
+    } catch (err) {
+        console.error("checkConeStatusAndAct err", err);
+        starrSetMessage("Error checking subscription. Try again later.");
+        accessDeniedPermanent = true;
+        await GM_setValue('starr_subscription_status', null);
+    } finally {
+        if (accessDeniedPermanent && forcePopupUpdate) {
+            updatePopupUI(true);
+        }
+    }
+}
     async function checkSubscriptionWarning() {
         if (!isAuthorized) {
             removeRedWarningBar();
@@ -1488,6 +1507,8 @@
                     const responseData = JSON.parse(res.responseText);
                     const rawContent = responseData.choices?.[0]?.message?.content?.trim() || "Mmm... I'm speechless, baby. Try again?";
                     const replies = payload.isMultiResponseEnabled ? rawContent.split('|||').map(r => r.trim()) : [rawContent];
+
+
 
                     starrResponses.innerHTML = "";
 
