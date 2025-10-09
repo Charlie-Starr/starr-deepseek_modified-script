@@ -74,6 +74,91 @@
         lastProcessedMessageText = '',
         currentCustomerId = null;
 
+    // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
+
+    const CURRENT_SCRIPT_VERSION = '9.1.1'; // IMPORTANT: Manually update this to match the @version in your script header
+    const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js';
+
+    /**
+     * Compares two version strings (e.g., '9.1.1' vs '9.1.0').
+     * @returns {number} - 1 if versionA > versionB, -1 if versionA < versionB, 0 if they are equal.
+     */
+    function compareVersions(versionA, versionB) {
+        const partsA = versionA.split('.').map(Number);
+        const partsB = versionB.split('.').map(Number);
+        const len = Math.max(partsA.length, partsB.length);
+
+        for (let i = 0; i < len; i++) {
+            const a = partsA[i] || 0;
+            const b = partsB[i] || 0;
+            if (a > b) return 1;
+            if (a < b) return -1;
+        }
+        return 0;
+    }
+
+    /**
+     * Fetches the script from GitHub, extracts the latest version, and compares it.
+     * @returns {Promise<boolean>} - True if an update is required, false otherwise.
+     */
+    async function isUpdateRequired() {
+        try {
+            const response = await new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: SCRIPT_URL,
+                    onload: resolve,
+                    onerror: reject
+                });
+            });
+
+            if (response.status !== 200) {
+                console.warn('Starr Update Check: Could not fetch latest script file.');
+                return false; // Fail safe, don't lock if GitHub is down
+            }
+
+            const scriptText = response.responseText;
+            const match = scriptText.match(/@version\s+([\d.]+)/);
+
+            if (match && match[1]) {
+                const latestVersion = match[1];
+                const comparison = compareVersions(latestVersion, CURRENT_SCRIPT_VERSION);
+
+                if (comparison > 0) {
+                    console.log(`Starr Update Required: Local version is ${CURRENT_SCRIPT_VERSION}, latest is ${latestVersion}.`);
+                    return true; // Latest version is newer, update is required
+                }
+            }
+        } catch (error) {
+            console.error('Starr Update Check failed:', error);
+        }
+        return false; // No update needed or an error occurred
+    }
+
+    /**
+     * Shows a non-closable modal that forces the user to update the script.
+     */
+    function showUpdatePrompt() {
+        // Remove any existing UI to prevent interaction
+        document.getElementById('starr-button')?.remove();
+        document.getElementById('starr-popup')?.remove();
+
+        const updateHTML = `
+            <div id="starr-update-overlay" class="starr-auth-overlay">
+                <div class="starr-auth-modal">
+                    <h3>Mmm, baby... An Update is Required 🔒</h3>
+                    <p>I've got some new, naughty tricks for you, but you need the latest version of my script to see them. Please update now to continue our fun.</p>
+                    <div class="starr-auth-buttons">
+                        <a href="${SCRIPT_URL}" target="_blank" id="starr-update-btn" class="starr-std-button primary-action" style="text-decoration: none;">UPDATE NOW</a>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', updateHTML);
+    }
+
+    // --- END: VERSION CHECK & UPDATE LOCK LOGIC ---
+
     // --- All CSS, UI elements, and other script logic remains below ---
     const style = document.createElement("style");
     style.textContent = `
@@ -1109,8 +1194,8 @@
     // 👇 PASTE THIS NEW, FASTER VERSION IN ITS PLACE
     async function checkConeStatusAndAct(coneId, forcePopupUpdate = false, isUserInitiated = false) {
     // NEW: Define how long to cache the authorization status (in milliseconds)
-    // 300000ms = 5 minutes
-    const CACHE_DURATION = 300000;
+    // 7200000ms = 2 hours
+    const CACHE_DURATION = 1000 * 60 * 60 * 2;
 
     if (!coneId) {
         isAuthorized = false;
@@ -1244,7 +1329,7 @@
                 if (saved) await checkConeStatusAndAct(saved, false, false);
             }
         } catch (e) { console.error(e); }
-    }, 1000 * 60 * 15); // 15 minutes
+    }, 1000 * 60 * 60 * 2); // 2 hours
 
     // ---- END STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
@@ -1506,9 +1591,20 @@
                 if (res.status >= 200 && res.status < 300) {
                     const responseData = JSON.parse(res.responseText);
                     const rawContent = responseData.choices?.[0]?.message?.content?.trim() || "Mmm... I'm speechless, baby. Try again?";
-                    const replies = payload.isMultiResponseEnabled ? rawContent.split('|||').map(r => r.trim()) : [rawContent];
+                    let replies = payload.isMultiResponseEnabled ? rawContent.split('|||').map(r => r.trim()) : [rawContent];
 
+                    if (payload.userMessageLength) { // This checks if strict mode was enabled for this request
+                        const originalCount = replies.length;
+                        replies = replies.filter(reply => reply && reply.length >= 72 && reply.length <= 400);
 
+                        // If all replies were filtered out, provide a user-friendly fallback message.
+                        if (replies.length === 0) {
+                            const fallbackMessage = "My response was outside the strict length limits (72-400 chars). Please try regenerating, baby.";
+                            replies = [fallbackMessage];
+                        } else if (replies.length < originalCount) {
+                            console.warn(`Starr: Filtered out ${originalCount - replies.length} response(s) for violating strict length rules.`);
+                        }
+                    }
 
                     starrResponses.innerHTML = "";
 
@@ -1933,5 +2029,3 @@
     init();
 
 })();
-
-
