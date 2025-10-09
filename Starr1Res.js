@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.1.0 // Feature Restoration & Final Client-Side Fixes
+// @version       9.1.1 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -1009,10 +1009,10 @@
         } else {
             plansHTML = `
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-                    <button class="starr-plan-btn" data-weeks="1">1w - ₦5,000</button>
-                    <button class="starr-plan-btn" data-weeks="2">2w - ₦10,000</button>
-                    <button class="starr-plan-btn" data-weeks="3">3w - ₦15,000</button>
-                    <button class="starr-plan-btn" data-weeks="4">4w - ₦20,000</button>
+                    <button class="starr-plan-btn" data-weeks="1">1w - ₦7,000</button>
+                    <button class="starr-plan-btn" data-weeks="2">2w - ₦14,000</button>
+                    <button class="starr-plan-btn" data-weeks="3">3w - ₦21,000</button>
+                    <button class="starr-plan-btn" data-weeks="4">4w - ₦28,000</button>
                 </div>
             `;
         }
@@ -1933,4 +1933,5 @@
     init();
 
 })();
+
 
