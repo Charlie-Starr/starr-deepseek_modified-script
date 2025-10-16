@@ -4,8 +4,8 @@
 // @version       9.1.2 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
-// @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
-// @updateURL     https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
+// @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
+// @updateURL     https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
 // @grant         GM_setValue
 // @grant         GM_getValue
 // @grant         GM_notification
@@ -77,7 +77,7 @@
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
     const CURRENT_SCRIPT_VERSION = '9.1.2'; // IMPORTANT: Manually update this to match the @version in your script header
-    const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js';
+    const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
      * Compares two version strings (e.g., '9.1.1' vs '9.1.0').
@@ -2048,3 +2048,4 @@
     }, 500); // Check every half-second
 
 })();
+
