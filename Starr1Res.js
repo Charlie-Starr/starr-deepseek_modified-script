@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.1.1 // Feature Restoration & Final Client-Side Fixes
+// @version       9.1.2 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js
@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.1.1'; // IMPORTANT: Manually update this to match the @version in your script header
+    const CURRENT_SCRIPT_VERSION = '9.1.2'; // IMPORTANT: Manually update this to match the @version in your script header
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.js';
 
     /**
@@ -957,58 +957,43 @@
             document.body.classList.remove('ui-portrait'); document.body.classList.add('ui-landscape');
             await GM_setValue('starr_ui_mode', 'landscape');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
+            togglePopup(true);
         };
         document.getElementById('mode-portrait').onclick = async () => {
             document.body.classList.remove('ui-landscape'); document.body.classList.add('ui-portrait');
             await GM_setValue('starr_ui_mode', 'portrait');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
+            togglePopup(true);
         };
     }
 
     // ---- BEGIN STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
     async function redirectToCheckout(coneId, weeks, email, notificationEl, debtAmount = null) {
-        try {
-            notificationEl.textContent = "Generating secure payment link...";
+    // Update the UI
+    notificationEl.textContent = "Redirecting to our secure payment page...";
 
-            const payload = {
-                cone_id: coneId,
-                email: email
-            };
+    // Base URL of your hosted pay.html
+    const paymentPageBaseUrl = "https://my-starr-ai.github.io/Starr-AI/pay.html";
 
-            if (debtAmount !== null && debtAmount > 0) {
-                payload.debt_amount = debtAmount; // Add the debt amount to the payload
-            } else {
-                payload.weeks = weeks; // Use the original weeks logic for subscriptions
-            }
+    // Build the parameters
+    const params = new URLSearchParams();
+    params.append("cone_id", coneId);
+    params.append("email", email);
 
-            const response = await new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: CREATE_PAYMENT_URL,
-                    headers: { "Content-Type": "application/json" },
-                    data: JSON.stringify(payload), // Send the new dynamic payload
-                    onload: res => resolve(res),
-                    onerror: err => reject(err)
-                });
-            });
-
-            if (response.status < 200 || response.status >= 300) {
-                throw new Error(`API Error: ${response.statusText}`);
-            }
-
-            const data = JSON.parse(response.responseText);
-            if (data.success && data.data.authorization_url) {
-                window.location.href = data.data.authorization_url;
-            } else {
-                console.error("Payment init failed:", data);
-                notificationEl.textContent = data.error || "Payment initialization failed. Please try again.";
-            }
-        } catch (err) {
-            console.error("Checkout redirection error:", err);
-            notificationEl.textContent = "A network error occurred. Please check your connection.";
-        }
+    if (debtAmount !== null && debtAmount > 0) {
+        params.append("debt_amount", debtAmount);
+    } else {
+        params.append("weeks", weeks);
     }
+
+    // Construct the final redirect link
+    const finalUrl = `${paymentPageBaseUrl}?${params.toString()}`;
+
+    // Redirect to your hosted payment page (Paystack popup will launch there)
+    window.location.href = finalUrl;
+}
+
 
     function starrSetMessage(msg, isError = true) {
         GM_setValue('starr_auth_message', msg);
@@ -1195,7 +1180,7 @@
     async function checkConeStatusAndAct(coneId, forcePopupUpdate = false, isUserInitiated = false) {
     // NEW: Define how long to cache the authorization status (in milliseconds)
     // 7200000ms = 2 hours
-    const CACHE_DURATION = 1000 * 60 * 60 * 2;
+    const CACHE_DURATION = 1000 * 60 * 60 * 3;
 
     if (!coneId) {
         isAuthorized = false;
@@ -1453,11 +1438,17 @@
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
                 action: 'summarize',
+                version: CURRENT_SCRIPT_VERSION, // <-- Add this
                 apiKey,
                 textToSummarize: lastMessage,
                 preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
             }),
             onload: (res) => {
+                if (res.status === 426) {
+                    console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
+                    showUpdatePrompt();
+                    return;
+                }
                 if (res.status >= 200 && res.status < 300) {
                     const data = JSON.parse(res.responseText);
                     displaySummary(data.summary || "Could not generate a summary.");
@@ -1490,11 +1481,17 @@
         headers: { "Content-Type": "application/json" },
         data: JSON.stringify({
             action: 'scan_pi',
+            version: CURRENT_SCRIPT_VERSION, // <-- Add this
             apiKey,
             textToScan: text,
             preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
         }),
         onload: (res) => {
+            if (res.status === 426) {
+                console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
+                showUpdatePrompt();
+                return;
+            }
             if (res.status >= 200 && res.status < 300) {
                 const data = JSON.parse(res.responseText);
                 const result = data.pi;
@@ -1503,12 +1500,10 @@
                 } else {
                     GM_notification({ text: "The intelligent scan found no new personal information.", timeout: 3000, title: "Starr PI Scan" });
                 }
-                // **THE FIX:** Reset button on successful scan, regardless of result.
                 piScanButton.textContent = originalContent;
                 piScanButton.disabled = false;
             } else {
                 alert(`Starr: The intelligent PI scan failed. Server responded with status ${res.status}.`);
-                // Reset button on server-side errors.
                 piScanButton.textContent = originalContent;
                 piScanButton.disabled = false;
             }
@@ -1516,7 +1511,6 @@
         onerror: (err) => {
             console.error("Starr: AI PI Scan failed:", err);
             alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
-            // Reset button on network errors.
             piScanButton.textContent = originalContent;
             piScanButton.disabled = false;
         }
@@ -1553,6 +1547,7 @@
 
         const payload = {
             action: 'generate',
+            version: CURRENT_SCRIPT_VERSION,
             apiKey: apiKey,
             conversationHistory: conversationHistory,
             customerInfo: getCustomerInfo(),
@@ -1586,18 +1581,29 @@
             url: STARR_BACKEND_URL,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify(payload),
+            timeout: 30000, // <-- Make sure you still have the timeout fix!
+            ontimeout: () => {
+                starrLoading.style.setProperty('display', 'none', 'important');
+                alert(`Starr Timeout Error: The server is taking too long to respond. E be like say e go sleep. Please try again in a moment.`);
+                console.error("Starr Backend Error: Request timed out after 30 seconds.");
+            },
             onload: (res) => {
+                if (res.status === 426) {
+                    console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
+                    showUpdatePrompt();
+                    return;
+                }
+
                 starrLoading.style.setProperty('display', 'none', 'important');
                 if (res.status >= 200 && res.status < 300) {
                     const responseData = JSON.parse(res.responseText);
                     const rawContent = responseData.choices?.[0]?.message?.content?.trim() || "Mmm... I'm speechless, baby. Try again?";
                     let replies = payload.isMultiResponseEnabled ? rawContent.split('|||').map(r => r.trim()) : [rawContent];
 
-                    if (payload.userMessageLength) { // This checks if strict mode was enabled for this request
+                    if (payload.userMessageLength) {
                         const originalCount = replies.length;
                         replies = replies.filter(reply => reply && reply.length >= 72 && reply.length <= 400);
 
-                        // If all replies were filtered out, provide a user-friendly fallback message.
                         if (replies.length === 0) {
                             const fallbackMessage = "My response was outside the strict length limits (72-400 chars). Please try regenerating, baby.";
                             replies = [fallbackMessage];
@@ -1609,13 +1615,9 @@
                     starrResponses.innerHTML = "";
 
                     replies.forEach(replyText => {
-                        if (!replyText) return; // Skip empty replies
-
-                        // Failsafe client-side cleaning for the stubborn phrase
+                        if (!replyText) return;
                         const manWhoAlternatives = ["It's so hot when a man", "I'm really into a man", "It's a huge turn-on when a man"];
                         let cleanedReply = replyText.replace(/\bI love a man\b/gi, () => manWhoAlternatives[Math.floor(Math.random() * manWhoAlternatives.length)]);
-
-                        // Create the reply element
                         const div = document.createElement("div");
                         div.className = "starr-reply";
                         div.textContent = cleanedReply;
@@ -1673,10 +1675,20 @@
             method: "POST", url: STARR_BACKEND_URL,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
-                action: 'check_violation', apiKey, textToScrutinize: textUnderScrutiny, checkers,
+                action: 'check_violation',
+                version: CURRENT_SCRIPT_VERSION, // <-- Add this
+                apiKey,
+                textToScrutinize: textUnderScrutiny,
+                checkers,
                 userContext: conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1].content : ''
             }),
             onload: (res) => {
+                if (res.status === 426) {
+                    console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
+                    showUpdatePrompt();
+                    return;
+                }
+
                 clickedReplyElement.classList.remove('checking');
                 if (res.status >= 200 && res.status < 300) {
                     const finalResult = JSON.parse(res.responseText);
@@ -2026,6 +2038,13 @@
 });
 
 
-    init();
+    const startStarrWhenReady = setInterval(() => {
+        // We wait until we see the chat input box on the page. That's our sign that the site is ready.
+        if (document.querySelector('#reply-textarea')) {
+            clearInterval(startStarrWhenReady); // Stop waiting
+            init(); // Now, we run the script's main function
+            console.log("Starr: Site is ready, initializing the script now!");
+        }
+    }, 500); // Check every half-second
 
 })();
