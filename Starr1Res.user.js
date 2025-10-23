@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.3.0'; // IMPORTANT: Manually update this to match the @version in your script header
+    const CURRENT_SCRIPT_VERSION = '9.3.0'; 
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
@@ -2048,5 +2048,6 @@
     }, 500); // Check every half-second
 
 })();
+
 
 
