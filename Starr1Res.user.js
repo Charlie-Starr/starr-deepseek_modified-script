@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.1.2 // Feature Restoration & Final Client-Side Fixes
+// @version       9.3.0 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
@@ -43,7 +43,7 @@
     };
 
     // --- BACKEND & ASSET URLS ---
-    const STARR_BACKEND_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/starr_backend";
+    const STARR_BACKEND_URL = "https://starr-backend.danielkanyima9.workers.dev";
     const VALIDATE_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/validate-cone";
     const CREATE_PAYMENT_URL = "https://cqkezhynvlrzhwklxdtv.supabase.co/functions/v1/create-payment";
 
@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.1.2'; // IMPORTANT: Manually update this to match the @version in your script header
+    const CURRENT_SCRIPT_VERSION = '9.3.0'; // IMPORTANT: Manually update this to match the @version in your script header
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
@@ -2048,4 +2048,5 @@
     }, 500); // Check every half-second
 
 })();
+
 
