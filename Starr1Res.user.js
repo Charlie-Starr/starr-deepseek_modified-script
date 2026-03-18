@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.3.0 // Feature Restoration & Final Client-Side Fixes
+// @version       9.3.1 // Feature Restoration & Final Client-Side Fixes
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.3.0'; 
+    const CURRENT_SCRIPT_VERSION = '9.3.1';
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
@@ -242,6 +242,27 @@
             50% { transform: translate(-50%, -50%) scale(1.2); }
             100% { transform: translate(-50%, -50%) scale(1); }
         }
+
+        /* --- THE SAFE FLASH ANIMATION (NEW) --- */
+        @keyframes safe-flash-anim {
+            0% { background-color: var(--starr-reply-background); border-color: var(--starr-reply-border); }
+            30% { background-color: #2ed573; border-color: #ffffff; color: #ffffff; transform: scale(1.02); box-shadow: 0 0 15px #2ed573; }
+            100% { background-color: var(--starr-reply-background); border-color: var(--starr-reply-border); }
+        }
+        .starr-reply.safe-flash {
+            animation: safe-flash-anim 0.6s ease-out;
+            pointer-events: none;
+        }
+
+        /* --- THE ANTI-PARROT DOM HIGHLIGHT (NEW) --- */
+        .starr-copied-highlight {
+            border: 2px solid #ff1111 !important;
+            background-color: rgba(255, 17, 17, 0.1) !important;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(255, 17, 17, 0.6) !important;
+            transition: all 0.3s ease;
+        }
+
         #summary-and-pi-wrapper { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
         #summary-and-pi-wrapper #starr-summary-container { flex-grow: 1; margin-bottom: 0; }
         #starr-summary-container { display: none; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -624,6 +645,11 @@
         }
     }
 
+    // --- DOM Highlighting Cleanup Helper (NEW) ---
+    function removeCopiedHighlights() {
+        document.querySelectorAll('.starr-copied-highlight').forEach(el => el.classList.remove('starr-copied-highlight'));
+    }
+
     const button = document.createElement("button");
     button.id = "starr-button";
     button.textContent = "Flirt with Starr 🥰";
@@ -689,6 +715,8 @@
                 <h4 class="settings-section-header">Feature Settings</h4>
                 <label> <input type="checkbox" id="multi-response-toggle"> Enable Multi-Response Mode </label>
                 <label> <input type="checkbox" id="strict-length-toggle"> Enforce Strict Message Length Matching </label>
+                <!-- NEW: Anti-Parrot Threshold Input -->
+                <label> <input type="number" id="anti-parrot-threshold" min="10" max="200" style="width: 50px; margin-left: 5px;"> Anti-Parrot Threshold (chars) </label>
                 <label> <input type="checkbox" id="pi-scan-toggle" checked> Show PI Scan Button </label>
                 <label> <input type="checkbox" id="summary-toggle" checked> Enable Summary for Long Messages </label>
                 <div class="model-switcher" style="margin-top: 10px;">
@@ -811,6 +839,8 @@
     const mismatchRetryButton = document.getElementById('mismatch-retry-button');
     const multiResponseToggle = document.getElementById('multi-response-toggle');
     const strictLengthToggle = document.getElementById('strict-length-toggle');
+    // NEW: Anti-Parrot Threshold input
+    const antiParrotThresholdInput = document.getElementById('anti-parrot-threshold');
 
     let conversationHistory = [];
     let selectedReplyIndex = -1;
@@ -954,13 +984,15 @@
         document.head.insertAdjacentHTML('beforeend', `<style>${modeCSS}</style>`);
         document.body.insertAdjacentHTML('beforeend', modeHTML);
         document.getElementById('mode-landscape').onclick = async () => {
-            document.body.classList.remove('ui-portrait'); document.body.classList.add('ui-landscape');
+            document.body.classList.remove('ui-landscape', 'ui-portrait');
+            document.body.classList.add('ui-landscape');
             await GM_setValue('starr_ui_mode', 'landscape');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
             togglePopup(true);
         };
         document.getElementById('mode-portrait').onclick = async () => {
-            document.body.classList.remove('ui-landscape'); document.body.classList.add('ui-portrait');
+            document.body.classList.remove('ui-landscape', 'ui-portrait');
+            document.body.classList.add('ui-portrait');
             await GM_setValue('starr_ui_mode', 'portrait');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
             togglePopup(true);
@@ -970,29 +1002,29 @@
     // ---- BEGIN STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
     async function redirectToCheckout(coneId, weeks, email, notificationEl, debtAmount = null) {
-    // Update the UI
-    notificationEl.textContent = "Redirecting to our secure payment page...";
+        // Update the UI
+        notificationEl.textContent = "Redirecting to our secure payment page...";
 
-    // Base URL of your hosted pay.html
-    const paymentPageBaseUrl = "https://my-starr-ai.github.io/Starr-AI/pay.html";
+        // Base URL of your hosted pay.html
+        const paymentPageBaseUrl = "https://my-starr-ai.github.io/Starr-AI/pay.html";
 
-    // Build the parameters
-    const params = new URLSearchParams();
-    params.append("cone_id", coneId);
-    params.append("email", email);
+        // Build the parameters
+        const params = new URLSearchParams();
+        params.append("cone_id", coneId);
+        params.append("email", email);
 
-    if (debtAmount !== null && debtAmount > 0) {
-        params.append("debt_amount", debtAmount);
-    } else {
-        params.append("weeks", weeks);
+        if (debtAmount !== null && debtAmount > 0) {
+            params.append("debt_amount", debtAmount);
+        } else {
+            params.append("weeks", weeks);
+        }
+
+        // Construct the final redirect link
+        const finalUrl = `${paymentPageBaseUrl}?${params.toString()}`;
+
+        // Redirect to your hosted payment page (Paystack popup will launch there)
+        window.location.href = finalUrl;
     }
-
-    // Construct the final redirect link
-    const finalUrl = `${paymentPageBaseUrl}?${params.toString()}`;
-
-    // Redirect to your hosted payment page (Paystack popup will launch there)
-    window.location.href = finalUrl;
-}
 
 
     function starrSetMessage(msg, isError = true) {
@@ -1178,89 +1210,89 @@
 
     // 👇 PASTE THIS NEW, FASTER VERSION IN ITS PLACE
     async function checkConeStatusAndAct(coneId, forcePopupUpdate = false, isUserInitiated = false) {
-    // NEW: Define how long to cache the authorization status (in milliseconds)
-    // 7200000ms = 2 hours
-    const CACHE_DURATION = 1000 * 60 * 60 * 3;
+        // NEW: Define how long to cache the authorization status (in milliseconds)
+        // 7200000ms = 2 hours
+        const CACHE_DURATION = 1000 * 60 * 60 * 3;
 
-    if (!coneId) {
-        isAuthorized = false;
-        accessDeniedPermanent = false;
-        await GM_setValue('starr_subscription_status', null);
-        if (forcePopupUpdate) updatePopupUI(true);
-        return;
-    }
-
-    // NEW: Check for a valid, non-expired cached status first
-    const cachedStatus = await GM_getValue('starr_subscription_status', null);
-    const lastCheckTime = await GM_getValue('starr_last_auth_check_time', 0);
-
-    if (cachedStatus && (Date.now() - lastCheckTime < CACHE_DURATION) && !isUserInitiated) {
-        console.log("[StarrAuth] Using cached status.");
-        const data = cachedStatus;
-        isAuthorized = (data.status === "active");
-        accessDeniedPermanent = !isAuthorized;
-        if (forcePopupUpdate) updatePopupUI(true);
-        return; // IMPORTANT: Skip the network request
-    }
-
-    console.log("[StarrAuth] Cache expired or not found. Performing live network check...");
-    try {
-        const response = await new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "POST", url: VALIDATE_URL, headers: { "Content-Type": "application/json" },
-                data: JSON.stringify({ cone_id: coneId }),
-                onload: res => resolve(res), onerror: err => reject(err)
-            });
-        });
-
-        if (response.status < 200 || response.status >= 300) throw new Error("API Error");
-
-        const data = JSON.parse(response.responseText);
-        // NEW: Save the new status AND the current time to the cache
-        await GM_setValue('starr_subscription_status', data);
-        await GM_setValue('starr_last_auth_check_time', Date.now());
-        console.log("[validate-cone] Fetched and cached new status:", data);
-
-        const oldOverlay = document.getElementById('starr-block-overlay');
-        if (oldOverlay) oldOverlay.remove();
-        isAuthorized = false;
-        accessDeniedPermanent = false;
-
-        if (data.status === "active") {
-            isAuthorized = true;
-            starrSetMessage("✅ Subscription active. Welcome back!", false);
-            if(forcePopupUpdate) updatePopupUI(true);
+        if (!coneId) {
+            isAuthorized = false;
+            accessDeniedPermanent = false;
+            await GM_setValue('starr_subscription_status', null);
+            if (forcePopupUpdate) updatePopupUI(true);
             return;
         }
 
-        accessDeniedPermanent = true;
+        // NEW: Check for a valid, non-expired cached status first
+        const cachedStatus = await GM_getValue('starr_subscription_status', null);
+        const lastCheckTime = await GM_getValue('starr_last_auth_check_time', 0);
 
-        if (data.status === "debt") {
-            const bal = data.balance_due ?? 0;
-            starrSetMessage(`Omo you dey owe ₦${bal}. Balance up, no vex`);
-            if (isUserInitiated) {
-                showBlockingUI(coneId, `Owe ₦${bal}`, "You need to clear this debt before you can subscribe again.", "CLEAR BALANCE", () => openPayModal(coneId, 'debt', 1, '', bal));
-            }
-        } else if (data.status === "expired" || data.status === "not_found") {
-            const msg = data.status === "expired"
-                ? "Ogbeni pay money joor... Your sub don finish. You dey whine?"
-                : "I don't know you yet, baby. Subscribe to register your Cone ID.";
-            starrSetMessage(msg);
-            if (isUserInitiated) {
-                showBlockingUI(coneId, "Subscription Required", msg, "SUBSCRIBE", () => openPayModal(coneId, 'subscribe', 1, ''));
-            }
+        if (cachedStatus && (Date.now() - lastCheckTime < CACHE_DURATION) && !isUserInitiated) {
+            console.log("[StarrAuth] Using cached status.");
+            const data = cachedStatus;
+            isAuthorized = (data.status === "active");
+            accessDeniedPermanent = !isAuthorized;
+            if (forcePopupUpdate) updatePopupUI(true);
+            return; // IMPORTANT: Skip the network request
         }
-    } catch (err) {
-        console.error("checkConeStatusAndAct err", err);
-        starrSetMessage("Error checking subscription. Try again later.");
-        accessDeniedPermanent = true;
-        await GM_setValue('starr_subscription_status', null);
-    } finally {
-        if (accessDeniedPermanent && forcePopupUpdate) {
-            updatePopupUI(true);
+
+        console.log("[StarrAuth] Cache expired or not found. Performing live network check...");
+        try {
+            const response = await new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "POST", url: VALIDATE_URL, headers: { "Content-Type": "application/json" },
+                    data: JSON.stringify({ cone_id: coneId }),
+                    onload: res => resolve(res), onerror: err => reject(err)
+                });
+            });
+
+            if (response.status < 200 || response.status >= 300) throw new Error("API Error");
+
+            const data = JSON.parse(response.responseText);
+            // NEW: Save the new status AND the current time to the cache
+            await GM_setValue('starr_subscription_status', data);
+            await GM_setValue('starr_last_auth_check_time', Date.now());
+            console.log("[validate-cone] Fetched and cached new status:", data);
+
+            const oldOverlay = document.getElementById('starr-block-overlay');
+            if (oldOverlay) oldOverlay.remove();
+            isAuthorized = false;
+            accessDeniedPermanent = false;
+
+            if (data.status === "active") {
+                isAuthorized = true;
+                starrSetMessage("✅ Subscription active. Welcome back!", false);
+                if(forcePopupUpdate) updatePopupUI(true);
+                return;
+            }
+
+            accessDeniedPermanent = true;
+
+            if (data.status === "debt") {
+                const bal = data.balance_due ?? 0;
+                starrSetMessage(`Omo you dey owe ₦${bal}. Balance up, no vex`);
+                if (isUserInitiated) {
+                    showBlockingUI(coneId, `Owe ₦${bal}`, "You need to clear this debt before you can subscribe again.", "CLEAR BALANCE", () => openPayModal(coneId, 'debt', 1, '', bal));
+                }
+            } else if (data.status === "expired" || data.status === "not_found") {
+                const msg = data.status === "expired"
+                    ? "Ogbeni pay money joor... Your sub don finish. You dey whine?"
+                    : "I don't know you yet, baby. Subscribe to register your Cone ID.";
+                starrSetMessage(msg);
+                if (isUserInitiated) {
+                    showBlockingUI(coneId, "Subscription Required", msg, "SUBSCRIBE", () => openPayModal(coneId, 'subscribe', 1, ''));
+                }
+            }
+        } catch (err) {
+            console.error("checkConeStatusAndAct err", err);
+            starrSetMessage("Error checking subscription. Try again later.");
+            accessDeniedPermanent = true;
+            await GM_setValue('starr_subscription_status', null);
+        } finally {
+            if (accessDeniedPermanent && forcePopupUpdate) {
+                updatePopupUI(true);
+            }
         }
     }
-}
     async function checkSubscriptionWarning() {
         if (!isAuthorized) {
             removeRedWarningBar();
@@ -1465,57 +1497,57 @@
     }
 
     async function scanMessageForPI(text) {
-    const apiKey = GM_getValue("starr_openrouter_api_key", null);
-    if (!apiKey) {
-        alert("Cannot scan for PI without an API key.");
-        return;
-    }
-
-    const originalContent = piScanButton.textContent;
-    piScanButton.textContent = '⏳';
-    piScanButton.disabled = true;
-
-    GM_xmlhttpRequest({
-        method: "POST",
-        url: STARR_BACKEND_URL,
-        headers: { "Content-Type": "application/json" },
-        data: JSON.stringify({
-            action: 'scan_pi',
-            version: CURRENT_SCRIPT_VERSION, // <-- Add this
-            apiKey,
-            textToScan: text,
-            preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
-        }),
-        onload: (res) => {
-            if (res.status === 426) {
-                console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
-                showUpdatePrompt();
-                return;
-            }
-            if (res.status >= 200 && res.status < 300) {
-                const data = JSON.parse(res.responseText);
-                const result = data.pi;
-                if (result && result.toUpperCase().trim() !== 'NONE') {
-                    displayAiPiNotification(result);
-                } else {
-                    GM_notification({ text: "The intelligent scan found no new personal information.", timeout: 3000, title: "Starr PI Scan" });
-                }
-                piScanButton.textContent = originalContent;
-                piScanButton.disabled = false;
-            } else {
-                alert(`Starr: The intelligent PI scan failed. Server responded with status ${res.status}.`);
-                piScanButton.textContent = originalContent;
-                piScanButton.disabled = false;
-            }
-        },
-        onerror: (err) => {
-            console.error("Starr: AI PI Scan failed:", err);
-            alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
-            piScanButton.textContent = originalContent;
-            piScanButton.disabled = false;
+        const apiKey = GM_getValue("starr_openrouter_api_key", null);
+        if (!apiKey) {
+            alert("Cannot scan for PI without an API key.");
+            return;
         }
-    });
-}
+
+        const originalContent = piScanButton.textContent;
+        piScanButton.textContent = '⏳';
+        piScanButton.disabled = true;
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: STARR_BACKEND_URL,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify({
+                action: 'scan_pi',
+                version: CURRENT_SCRIPT_VERSION, // <-- Add this
+                apiKey,
+                textToScan: text,
+                preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
+            }),
+            onload: (res) => {
+                if (res.status === 426) {
+                    console.error("Starr: Backend reports script is outdated. Forcing update prompt.");
+                    showUpdatePrompt();
+                    return;
+                }
+                if (res.status >= 200 && res.status < 300) {
+                    const data = JSON.parse(res.responseText);
+                    const result = data.pi;
+                    if (result && result.toUpperCase().trim() !== 'NONE') {
+                        displayAiPiNotification(result);
+                    } else {
+                        GM_notification({ text: "The intelligent scan found no new personal information.", timeout: 3000, title: "Starr PI Scan" });
+                    }
+                    piScanButton.textContent = originalContent;
+                    piScanButton.disabled = false;
+                } else {
+                    alert(`Starr: The intelligent PI scan failed. Server responded with status ${res.status}.`);
+                    piScanButton.textContent = originalContent;
+                    piScanButton.disabled = false;
+                }
+            },
+            onerror: (err) => {
+                console.error("Starr: AI PI Scan failed:", err);
+                alert("Starr: The intelligent PI scan failed due to a network error. Check the console.");
+                piScanButton.textContent = originalContent;
+                piScanButton.disabled = false;
+            }
+        });
+    }
 
     async function fetchResponses(input, tone = 'plain', regenerationFocus = null) {
         if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
@@ -1650,22 +1682,82 @@
         });
     }
 
+    // --- NEW: Helper function for green flash and paste ---
+    function flashAndPaste(clickedReplyElement, text) {
+        clickedReplyElement.classList.remove('checking');
+        clickedReplyElement.classList.add('safe-flash');
+
+        setTimeout(() => {
+            pasteIntoSiteChat(text);
+            conversationHistory.push({ role: "assistant", content: text });
+            togglePopup(false);
+            clickedReplyElement.classList.remove('safe-flash');
+        }, 300);
+    }
+
     async function handleReplyClick(event) {
-        if (!event.target.classList.contains('starr-reply') || event.target.classList.contains('checking')) return;
+        if (!event.target.classList.contains('starr-reply') || event.target.classList.contains('checking') || event.target.classList.contains('safe-flash')) return;
 
         const clickedReplyElement = event.target;
         textUnderScrutiny = clickedReplyElement.textContent;
-        const apiKey = GM_getValue("starr_openrouter_api_key", null);
 
+        // --- START OF ANTI-PARROT GATE (NEW) ---
+        const normalizeText = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normScrutiny = normalizeText(textUnderScrutiny);
+        const threshold = parseInt(await GM_getValue('starr_anti_parrot_threshold', 35), 10);
+
+        let isCopyPaste = false;
+        let copiedTextExact = "";
+        let copiedElementDOM = null;
+
+        if (normScrutiny.length > threshold) {
+            // Scrape the visual DOM directly to find matches, looking at the last 10 chat bubbles
+            const chatBubbles = Array.from(document.querySelectorAll('div.my-2')).slice(-10);
+
+            for (let bubble of chatBubbles) {
+                const pElement = bubble.querySelector(ALL_CUSTOMER_MESSAGES_SELECTOR);
+                if (!pElement) continue;
+
+                const bubbleText = pElement.innerText.trim();
+                const normBubble = normalizeText(bubbleText);
+
+                if (normBubble.length > threshold) {
+                    // Match condition: It must be an exact match, or one fully encompasses the other
+                    if (normBubble === normScrutiny || normScrutiny.includes(normBubble) || normBubble.includes(normScrutiny)) {
+                        isCopyPaste = true;
+                        copiedTextExact = bubbleText;
+                        copiedElementDOM = bubble;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (isCopyPaste) {
+            // Update modal with exact message
+            violationReason.innerHTML = `<strong>Anti-Parrot Alert 🦜:</strong><br>Starr just tried to copy-paste a recent message! Regenerate this immediately to keep it fresh.<br><br><span style="color: #d32f2f; display: block; padding: 8px; background: rgba(255,0,0,0.1); border-radius: 5px; font-style: italic; border: 1px solid #ffcccc; margin-top: 10px;">"${copiedTextExact}"</span>`;
+
+            // Highlight it on the actual website DOM
+            if (copiedElementDOM) {
+                removeCopiedHighlights(); // Clear old highlights
+                copiedElementDOM.classList.add('starr-copied-highlight');
+                copiedElementDOM.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            violationWarningOverlay.style.display = 'flex';
+            violationSound.play().catch(e => console.error("Violation alarm playback failed:", e));
+            return;
+        }
+        // --- END OF ANTI-PARROT GATE ---
+
+        const apiKey = GM_getValue("starr_openrouter_api_key", null);
         const checkers = {
             regex: regexCheckerToggle.checked,
             llm: llmCheckerToggle.checked
         };
 
         if (!checkers.regex && !checkers.llm) {
-            pasteIntoSiteChat(textUnderScrutiny);
-            conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
-            togglePopup(false);
+            flashAndPaste(clickedReplyElement, textUnderScrutiny);
             return;
         }
 
@@ -1689,20 +1781,19 @@
                     return;
                 }
 
-                clickedReplyElement.classList.remove('checking');
                 if (res.status >= 200 && res.status < 300) {
                     const finalResult = JSON.parse(res.responseText);
                     if (finalResult.verdict === "block") {
+                        clickedReplyElement.classList.remove('checking');
                         const reasonText = finalResult.issues.map(issue => issue.reason).join('; ');
                         violationReason.textContent = reasonText || "A policy violation was detected.";
                         violationWarningOverlay.style.display = 'flex';
                         violationSound.play().catch(e => console.error("Violation alarm playback failed:", e));
                     } else {
-                        pasteIntoSiteChat(textUnderScrutiny);
-                        conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
-                        togglePopup(false);
+                        flashAndPaste(clickedReplyElement, textUnderScrutiny);
                     }
                 } else {
+                    clickedReplyElement.classList.remove('checking');
                     alert('Violation check failed. See console for details.');
                     console.error('Violation check error:', res);
                 }
@@ -1732,55 +1823,57 @@
     document.getElementById("starr-force-key").addEventListener("click", () => { GM_setValue("starr_openrouter_api_key", null); alert("API key cleared. You will be prompted for a new one on next use."); starrResponses.innerHTML = '<div class="starr-reply">API key cleared. Try again.</div>'; });
     function pasteIntoSiteChat(text) { const cleanedText = text.replace(/\s*Copy\s*$/, ''); const input = document.querySelector(REPLY_INPUT_SELECTOR); if (input) { input.focus(); input.value = cleanedText; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); input.focus(); } else { GM_notification({ text: `Could not auto-paste. Check selector: ${REPLY_INPUT_SELECTOR}`, timeout: 5000, title: "Starr Warning" }); } }
     starrResponses.addEventListener("click", handleReplyClick);
+
     async function pollForNewMessages() {
-    checkSubscriptionWarning();
-    const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId);
-    const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null;
-    if (newCustomerId && newCustomerId !== currentCustomerId) {
-        console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`);
-        currentCustomerId = newCustomerId;
-        conversationHistory = [];
-        lastProcessedMessageText = '';
-        starrResponses.innerHTML = '';
-        if (summaryContainer) summaryContainer.style.display = 'none';
-    }
-    const uiConeId = getLoggedInConeId();
-    if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) {
-        isAuthorized = false;
-        storedUserConeId = null;
-        isUIPopulated = false;
-        idMismatchActive = true;
-        await GM_setValue('user_cone_id', null);
-        await GM_setValue('starr_subscription_status', null);
-        starrSetMessage('');
-        updatePopupUI(true);
-        return;
-    }
-    if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
-    const newHistory = buildFullConversationHistory();
-    if (newHistory.length > 0) {
-        const latestMessage = newHistory[newHistory.length - 1];
-        if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) {
-            lastProcessedMessageText = latestMessage.content;
-            conversationHistory = newHistory;
-            if (conversationHistory.filter(m => m.role === 'user').length === 1) {
-                updateThemeBasedOnTime();
-            }
-            detectAndNotifyPI(latestMessage.content, 'Customer');
-            checkAndSummarize();
+        checkSubscriptionWarning();
+        const customerIdEl = document.querySelector(CUSTOMER_INFO_SELECTORS.customerId);
+        const newCustomerId = customerIdEl ? customerIdEl.textContent.trim() : null;
+        if (newCustomerId && newCustomerId !== currentCustomerId) {
+            console.log(`Starr: New customer detected (${newCustomerId}). Resetting context.`);
+            currentCustomerId = newCustomerId;
+            conversationHistory = [];
+            lastProcessedMessageText = '';
+            starrResponses.innerHTML = '';
+            if (summaryContainer) summaryContainer.style.display = 'none';
+            removeCopiedHighlights(); // Ensure highlighting clears on new chat
+        }
+        const uiConeId = getLoggedInConeId();
+        if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) {
+            isAuthorized = false;
+            storedUserConeId = null;
+            isUIPopulated = false;
+            idMismatchActive = true;
+            await GM_setValue('user_cone_id', null);
+            await GM_setValue('starr_subscription_status', null);
+            starrSetMessage('');
+            updatePopupUI(true);
+            return;
+        }
+        if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
+        const newHistory = buildFullConversationHistory();
+        if (newHistory.length > 0) {
+            const latestMessage = newHistory[newHistory.length - 1];
+            if (latestMessage.role === 'user' && latestMessage.content !== lastProcessedMessageText) {
+                lastProcessedMessageText = latestMessage.content;
+                conversationHistory = newHistory;
+                if (conversationHistory.filter(m => m.role === 'user').length === 1) {
+                    updateThemeBasedOnTime();
+                }
+                detectAndNotifyPI(latestMessage.content, 'Customer');
+                checkAndSummarize();
 
-            popup.style.setProperty('display', 'flex', 'important'); requestAnimationFrame(() => popup.classList.add('visible')); updatePopupUI(true);
+                popup.style.setProperty('display', 'flex', 'important'); requestAnimationFrame(() => popup.classList.add('visible')); updatePopupUI(true);
 
-            starrInput.value = getUnansweredUserMessages();
-            starrInput.focus();
-            try {
-                await fetchResponses(getUnansweredUserMessages());
-            } catch (error) {
-                console.error("Starr: Error in automatic message processing:", error);
+                starrInput.value = getUnansweredUserMessages();
+                starrInput.focus();
+                try {
+                    await fetchResponses(getUnansweredUserMessages());
+                } catch (error) {
+                    console.error("Starr: Error in automatic message processing:", error);
+                }
             }
         }
     }
-}
     setInterval(pollForNewMessages, 1000);
     let currentTimerState = 'normal'; function pollForTimer() { if (!isTimerWarningEnabled || !popup.classList.contains('visible')) { if (currentTimerState !== 'normal') resetTimerState(); return; } const timerElement = document.querySelector(TIMER_WARNING_CONFIG.selector); if (!timerElement) { if (currentTimerState !== 'normal') resetTimerState(); return; } const [minutes, seconds] = timerElement.textContent.trim().split(':').map(Number); const totalSeconds = (minutes * 60) + seconds; if (totalSeconds <= 0) { if (currentTimerState !== 'normal') { resetTimerState(); document.getElementById('starr-close').click(); } } else if (totalSeconds <= 60) { if (currentTimerState !== 'emergency') { currentTimerState = 'emergency'; applyTheme('emergency-red'); starrHeader.innerHTML = "⚠️ REPLY NOW! ⚠️"; warningSound.pause(); emergencySound.play().catch(e => console.error("Emergency sound failed:", e.name)); } } else if (totalSeconds <= 120) { if (currentTimerState !== 'warning') { currentTimerState = 'warning'; applyTheme('warning-orange'); starrHeader.innerHTML = "⚠️ Message time running out..."; emergencySound.pause(); warningSound.play().catch(e => console.error("Warning sound failed:", e.name)); } } else { if (currentTimerState !== 'normal') resetTimerState(); } }
     function resetTimerState() { warningSound.pause(); emergencySound.pause(); warningSound.currentTime = 0; emergencySound.currentTime = 0; starrHeader.innerHTML = "Talk to Starr, baby💦..."; if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(GM_getValue('starr_current_theme', 'bubblegum')); currentTimerState = 'normal'; }
@@ -1800,23 +1893,25 @@
     multiResponseToggle.addEventListener("change", () => GM_setValue('starr_multi_response', multiResponseToggle.checked));
     stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
     strictLengthToggle.addEventListener("change", () => GM_setValue('starr_strict_length', strictLengthToggle.checked));
+    // NEW: Anti-Parrot Threshold input listener
+    antiParrotThresholdInput.addEventListener("change", () => GM_setValue('starr_anti_parrot_threshold', parseInt(antiParrotThresholdInput.value, 10)));
     uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
     themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
     piScanButton.addEventListener('click', () => { const message = getUnansweredUserMessages(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
 
     piLogCloseButton.addEventListener('click', () => {
-    const items = [];
-    piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
-        const cb = item.querySelector('input[type="checkbox"]');
-        const ti = item.querySelector('input[type="text"]');
-        if (cb?.checked && ti?.value) {
-            items.push(ti.value);
-        }
-    });
+        const items = [];
+        piEditorList.querySelectorAll('.starr-pi-item').forEach(item => {
+            const cb = item.querySelector('input[type="checkbox"]');
+            const ti = item.querySelector('input[type="text"]');
+            if (cb?.checked && ti?.value) {
+                items.push(ti.value);
+            }
+        });
 
-    let msg = "No items selected.";
+        let msg = "No items selected.";
 
-    if (items.length > 0) {
+        if (items.length > 0) {
             const textToLog = items.join('\n');
             GM_setClipboard(textToLog, 'text');
 
@@ -1851,35 +1946,51 @@
         }
 
         const originalText = piLogCloseButton.textContent;
-    piLogCloseButton.textContent = msg;
-    piLogCloseButton.disabled = true;
+        piLogCloseButton.textContent = msg;
+        piLogCloseButton.disabled = true;
 
-    // THE FIX: Reset the main PI scan button
-    const piScanButton = document.getElementById('starr-pi-scan-button');
-    if (piScanButton) {
-        piScanButton.textContent = '♻️';
-        piScanButton.disabled = false;
-    }
+        // THE FIX: Reset the main PI scan button
+        const piScanButton = document.getElementById('starr-pi-scan-button');
+        if (piScanButton) {
+            piScanButton.textContent = '♻️';
+            piScanButton.disabled = false;
+        }
 
-    setTimeout(() => {
-        piLogCloseButton.textContent = originalText;
-        piLogCloseButton.disabled = false;
-        piEditorPopup.style.display = 'none';
-    }, 1500);
-});
+        setTimeout(() => {
+            piLogCloseButton.textContent = originalText;
+            piLogCloseButton.disabled = false;
+            piEditorPopup.style.display = 'none';
+        }, 1500);
+    });
 
     piCloseButton.addEventListener('click', () => {
-    piEditorPopup.style.display = 'none';
-    // THE FIX: Reset the main PI scan button
-    const piScanButton = document.getElementById('starr-pi-scan-button');
-    if (piScanButton) {
-        piScanButton.textContent = '♻️';
-        piScanButton.disabled = false;
-    }
-});
-    violationEditButton.addEventListener('click', () => { pasteIntoSiteChat(textUnderScrutiny); conversationHistory.push({ role: "assistant", content: textUnderScrutiny }); violationWarningOverlay.style.display = 'none'; popup.classList.remove('visible'); setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300); });
-    violationRegenerateButton.addEventListener('click', () => { violationWarningOverlay.style.display = 'none'; document.getElementById('starr-regenerate').click(); });
-    violationWarningOverlay.addEventListener('click', (e) => { if (e.target === violationWarningOverlay) violationWarningOverlay.style.display = 'none'; });
+        piEditorPopup.style.display = 'none';
+        // THE FIX: Reset the main PI scan button
+        const piScanButton = document.getElementById('starr-pi-scan-button');
+        if (piScanButton) {
+            piScanButton.textContent = '♻️';
+            piScanButton.disabled = false;
+        }
+    });
+    violationEditButton.addEventListener('click', () => {
+        removeCopiedHighlights();
+        pasteIntoSiteChat(textUnderScrutiny);
+        conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
+        violationWarningOverlay.style.display = 'none';
+        popup.classList.remove('visible');
+        setTimeout(() => popup.style.setProperty('display', 'none', 'important'), 300);
+    });
+    violationRegenerateButton.addEventListener('click', () => {
+        removeCopiedHighlights();
+        violationWarningOverlay.style.display = 'none';
+        document.getElementById('starr-regenerate').click();
+    });
+    violationWarningOverlay.addEventListener('click', (e) => {
+        if (e.target === violationWarningOverlay) {
+            removeCopiedHighlights();
+            violationWarningOverlay.style.display = 'none';
+        }
+    });
     mismatchRetryButton.addEventListener('click', () => { idMismatchActive = false; mismatchSection.style.display = 'none'; initializeStarrPopup(); });
     async function applySavedUIPreferences() {
         darkModeToggle.checked = await GM_getValue('starr_dark_mode', false);
@@ -1893,6 +2004,8 @@
         isTimerWarningEnabled = timerWarningToggle.checked;
         multiResponseToggle.checked = await GM_getValue('starr_multi_response', false);
         strictLengthToggle.checked = await GM_getValue('starr_strict_length', false);
+        // NEW: Load Anti-Parrot Threshold
+        antiParrotThresholdInput.value = await GM_getValue('starr_anti_parrot_threshold', 35);
         voiceReplyToggle.checked = await GM_getValue('starr_voice_reply', true);
         regexCheckerToggle.checked = await GM_getValue('starr_regex_checker_enabled', true);
         llmCheckerToggle.checked = await GM_getValue('starr_llm_checker_enabled', false);
@@ -1908,26 +2021,26 @@
         autoThemeToggle.checked = isAutoThemeEnabled;
         if (isAutoThemeEnabled) updateThemeBasedOnTime(); else applyTheme(await GM_getValue('starr_current_theme', 'bubblegum'));
     }
-    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } if (isCtrl && e.key === 'Tab') { const piModal = document.getElementById('starr-pi-editor-popup'); if (piModal) piModal.classList.toggle('modal-minimized'); e.preventDefault(); } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); togglePopup(!popup.classList.contains('visible')); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') { const violationModal = document.getElementById('starr-violation-warning'); if (violationModal) violationModal.classList.toggle('modal-minimized'); } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
+    document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); removeCopiedHighlights(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } if (isCtrl && e.key === 'Tab') { const piModal = document.getElementById('starr-pi-editor-popup'); if (piModal) piModal.classList.toggle('modal-minimized'); e.preventDefault(); } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); togglePopup(!popup.classList.contains('visible')); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') { const violationModal = document.getElementById('starr-violation-warning'); if (violationModal) violationModal.classList.toggle('modal-minimized'); } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
     function togglePopup(show) {
-    if (show) {
-        // To show: first make it a flex container, then trigger the animation.
-        popup.style.setProperty('display', 'flex', 'important');
-        requestAnimationFrame(() => {
-            popup.classList.add('visible');
-            if (!isUIPopulated) {
-                 initializeStarrPopup();
-                 isUIPopulated = true;
-            }
-        });
-    } else {
-        // To hide: trigger the animation, then hide it completely after the animation finishes.
-        popup.classList.remove('visible');
-        setTimeout(() => {
-            popup.style.setProperty('display', 'none', 'important');
-        }, 300); // 300ms matches the CSS transition time
+        if (show) {
+            // To show: first make it a flex container, then trigger the animation.
+            popup.style.setProperty('display', 'flex', 'important');
+            requestAnimationFrame(() => {
+                popup.classList.add('visible');
+                if (!isUIPopulated) {
+                     initializeStarrPopup();
+                     isUIPopulated = true;
+                }
+            });
+        } else {
+            // To hide: trigger the animation, then hide it completely after the animation finishes.
+            popup.classList.remove('visible');
+            setTimeout(() => {
+                popup.style.setProperty('display', 'none', 'important');
+            }, 300); // 300ms matches the CSS transition time
+        }
     }
-}
     async function init() {
         await applySavedUIPreferences();
         setupSpicyRegenModes();
@@ -1957,35 +2070,36 @@
 
     // --- START OF MERGED FIX: ENHANCED EL-VIO LOGIC ---
     function handleElVioButtonClick(replyText) {
-    // Step 1: Specific replacements (transplanted from Ts.js)
-    let cleaned = replyText
-        .replace(/-/g, ' ')
-        .replace(/!/g, '.')
-        .replace(/:/g, '...')
-        .replace(/;/g, '...');
+        // Step 1: Specific replacements (transplanted from Ts.js)
+        let cleaned = replyText
+            .replace(/-/g, ' ')
+            .replace(/!/g, '.')
+            .replace(/:/g, '...')
+            .replace(/;/g, '...');
 
-    // Step 2: General cleanup for any other unwanted characters, preserving apostrophes.
-    cleaned = cleaned.replace(/[^\w\s.,?'’]/g, '');
+        // Step 2: General cleanup for any other unwanted characters, preserving apostrophes.
+        cleaned = cleaned.replace(/[^\w\s.,?'’]/g, '');
 
-    // This comprehensive list of forbidden phrases remains the same.
-    const forbiddenWordsAndPhrases = [
-        "sends shivers down my spine", "tingle", "Oh", "Mmm", "Damn", "incredibly", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
-        "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
-        "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
-        "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
-        "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
-    ];
+        // This comprehensive list of forbidden phrases remains the same.
+        const forbiddenWordsAndPhrases = [
+            "sends shivers down my spine", "tingle", "Oh", "Mmm", "Damn", "incredibly", "makes my heart race", "I'm here to...", "I love a man who knows what he wants",
+            "just imagining", "aching", "exploring every inch", "cowboy", "music to my ears", "intoxicating", "I love a man",
+            "hot and bothered", "send me your number", "text me", "call me", "come over now", "where and when", "God", "Jesus",
+            "minor", "underage", "incest", "bestiality", "rape", "racism", "suicide", "self-harm", "drug", "snap", "snapchat",
+            "whatsapp", "telegram", "imessage", "instagram", "twitter", "x.com", "tiktok", "kick", "onlyfans", "email me", "dm me", "d.m."
+        ];
 
-    forbiddenWordsAndPhrases.forEach(phrase => {
-        const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-        cleaned = cleaned.replace(regex, ' ');
-    });
+        forbiddenWordsAndPhrases.forEach(phrase => {
+            const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+            cleaned = cleaned.replace(regex, ' ');
+        });
 
-    // Clean up any extra spaces created by the replacements.
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    return cleaned;
-}
+        // Clean up any extra spaces created by the replacements.
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        return cleaned;
+    }
     violationElVioButton.addEventListener('click', () => {
+        removeCopiedHighlights();
         const repaired = handleElVioButtonClick(textUnderScrutiny);
 
         pasteIntoSiteChat(repaired);
@@ -1996,47 +2110,46 @@
     // --- END OF MERGED FIX ---
 
     document.getElementById("starr-regenerate").addEventListener("click", () => {
-    if (conversationHistory.length === 0) {
-        alert("Nothing to regenerate, baby.");
-        return;
-    }
-
-    // 1. Find the last block of consecutive user messages.
-    const lastUserMessages = [];
-    let fullHistory = buildFullConversationHistory(); // Always get the freshest history from the DOM
-    for (let i = fullHistory.length - 1; i >= 0; i--) {
-        if (fullHistory[i].role === 'user') {
-            lastUserMessages.unshift(fullHistory[i].content);
-        } else {
-            // We've hit the last AI message, so we stop.
-            break;
+        if (conversationHistory.length === 0) {
+            alert("Nothing to regenerate, baby.");
+            return;
         }
-    }
 
-    if (lastUserMessages.length === 0) {
-        alert("Could not find a user message to regenerate from.");
-        return;
-    }
-
-    // 2. Remove the last AI response(s) from the official history.
-    // This finds the index of the last user message and slices the history up to that point.
-    let lastUserIndex = -1;
-    for (let i = conversationHistory.length - 1; i >= 0; i--) {
-        if (conversationHistory[i].role === 'user') {
-            lastUserIndex = i;
-            break;
+        // 1. Find the last block of consecutive user messages.
+        const lastUserMessages = [];
+        let fullHistory = buildFullConversationHistory(); // Always get the freshest history from the DOM
+        for (let i = fullHistory.length - 1; i >= 0; i--) {
+            if (fullHistory[i].role === 'user') {
+                lastUserMessages.unshift(fullHistory[i].content);
+            } else {
+                // We've hit the last AI message, so we stop.
+                break;
+            }
         }
-    }
-    if (lastUserIndex !== -1) {
-        conversationHistory.splice(lastUserIndex + 1);
-    }
 
-    const regenerationText = lastUserMessages.join(' ');
+        if (lastUserMessages.length === 0) {
+            alert("Could not find a user message to regenerate from.");
+            return;
+        }
 
-    // 3. Call fetchResponses with the special 'regenerationFocus' text.
-    fetchResponses(regenerationText, 'plain', regenerationText);
-});
+        // 2. Remove the last AI response(s) from the official history.
+        // This finds the index of the last user message and slices the history up to that point.
+        let lastUserIndex = -1;
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+            if (conversationHistory[i].role === 'user') {
+                lastUserIndex = i;
+                break;
+            }
+        }
+        if (lastUserIndex !== -1) {
+            conversationHistory.splice(lastUserIndex + 1);
+        }
 
+        const regenerationText = lastUserMessages.join(' ');
+
+        // 3. Call fetchResponses with the special 'regenerationFocus' text.
+        fetchResponses(regenerationText, 'plain', regenerationText);
+    });
 
     const startStarrWhenReady = setInterval(() => {
         // We wait until we see the chat input box on the page. That's our sign that the site is ready.
@@ -2048,6 +2161,3 @@
     }, 500); // Check every half-second
 
 })();
-
-
-
