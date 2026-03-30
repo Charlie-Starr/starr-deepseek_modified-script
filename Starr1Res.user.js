@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.3.1 // Feature Restoration & Final Client-Side Fixes
+// @version       9.3.2
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.3.1';
+    const CURRENT_SCRIPT_VERSION = '9.3.2';
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
@@ -114,7 +114,7 @@
 
             if (response.status !== 200) {
                 console.warn('Starr Update Check: Could not fetch latest script file.');
-                return false; // Fail safe, don't lock if GitHub is down
+                return false;
             }
 
             const scriptText = response.responseText;
@@ -126,20 +126,19 @@
 
                 if (comparison > 0) {
                     console.log(`Starr Update Required: Local version is ${CURRENT_SCRIPT_VERSION}, latest is ${latestVersion}.`);
-                    return true; // Latest version is newer, update is required
+                    return true;
                 }
             }
         } catch (error) {
             console.error('Starr Update Check failed:', error);
         }
-        return false; // No update needed or an error occurred
+        return false;
     }
 
     /**
      * Shows a non-closable modal that forces the user to update the script.
      */
     function showUpdatePrompt() {
-        // Remove any existing UI to prevent interaction
         document.getElementById('starr-button')?.remove();
         document.getElementById('starr-popup')?.remove();
 
@@ -645,7 +644,7 @@
         }
     }
 
-    // --- DOM Highlighting Cleanup Helper (NEW) ---
+    // --- DOM Highlighting Cleanup Helper ---
     function removeCopiedHighlights() {
         document.querySelectorAll('.starr-copied-highlight').forEach(el => el.classList.remove('starr-copied-highlight'));
     }
@@ -715,10 +714,22 @@
                 <h4 class="settings-section-header">Feature Settings</h4>
                 <label> <input type="checkbox" id="multi-response-toggle"> Enable Multi-Response Mode </label>
                 <label> <input type="checkbox" id="strict-length-toggle"> Enforce Strict Message Length Matching </label>
-                <!-- NEW: Anti-Parrot Threshold Input -->
                 <label> <input type="number" id="anti-parrot-threshold" min="10" max="200" style="width: 50px; margin-left: 5px;"> Anti-Parrot Threshold (chars) </label>
                 <label> <input type="checkbox" id="pi-scan-toggle" checked> Show PI Scan Button </label>
                 <label> <input type="checkbox" id="summary-toggle" checked> Enable Summary for Long Messages </label>
+
+                <!-- NEW: Question Style Dropdown -->
+                <div style="margin-top: 10px;">
+                    <label for="question-style-select" style="display: block; margin-bottom: 5px;">Open-Ended Question Style:</label>
+                    <select id="question-style-select">
+                        <option value="playful">Playful</option>
+                        <option value="curious">Curious</option>
+                        <option value="suggestive">Suggestive</option>
+                        <option value="romantic">Romantic</option>
+                        <option value="direct">Direct</option>
+                    </select>
+                </div>
+
                 <div class="model-switcher" style="margin-top: 10px;">
                      <label for="starr-engine-select" style="display: block; margin-bottom: 5px;">Response Style Engine:</label>
                      <select id="starr-engine-select">
@@ -744,7 +755,6 @@
                     <input type="checkbox" id="llm-checker-toggle"> Enable AI Judge (Smart & Context-Aware)<br>
                 </label>
                  <small style="margin-left: 24px; margin-top: -5px; display: block;">(Minimal token use; highly recommended for accuracy)</small>
-
 
                 <div class="theme-switcher">
                     <h4 class="settings-section-header">Theme</h4>
@@ -839,8 +849,8 @@
     const mismatchRetryButton = document.getElementById('mismatch-retry-button');
     const multiResponseToggle = document.getElementById('multi-response-toggle');
     const strictLengthToggle = document.getElementById('strict-length-toggle');
-    // NEW: Anti-Parrot Threshold input
     const antiParrotThresholdInput = document.getElementById('anti-parrot-threshold');
+    const questionStyleSelect = document.getElementById('question-style-select');
 
     let conversationHistory = [];
     let selectedReplyIndex = -1;
@@ -984,15 +994,13 @@
         document.head.insertAdjacentHTML('beforeend', `<style>${modeCSS}</style>`);
         document.body.insertAdjacentHTML('beforeend', modeHTML);
         document.getElementById('mode-landscape').onclick = async () => {
-            document.body.classList.remove('ui-landscape', 'ui-portrait');
-            document.body.classList.add('ui-landscape');
+            document.body.classList.remove('ui-portrait'); document.body.classList.add('ui-landscape');
             await GM_setValue('starr_ui_mode', 'landscape');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
             togglePopup(true);
         };
         document.getElementById('mode-portrait').onclick = async () => {
-            document.body.classList.remove('ui-landscape', 'ui-portrait');
-            document.body.classList.add('ui-portrait');
+            document.body.classList.remove('ui-landscape'); document.body.classList.add('ui-portrait');
             await GM_setValue('starr_ui_mode', 'portrait');
             updateButtonIcons(); document.getElementById('starr-mode-overlay').remove();
             togglePopup(true);
@@ -1002,30 +1010,19 @@
     // ---- BEGIN STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
     async function redirectToCheckout(coneId, weeks, email, notificationEl, debtAmount = null) {
-        // Update the UI
         notificationEl.textContent = "Redirecting to our secure payment page...";
-
-        // Base URL of your hosted pay.html
         const paymentPageBaseUrl = "https://my-starr-ai.github.io/Starr-AI/pay.html";
-
-        // Build the parameters
         const params = new URLSearchParams();
         params.append("cone_id", coneId);
         params.append("email", email);
-
         if (debtAmount !== null && debtAmount > 0) {
             params.append("debt_amount", debtAmount);
         } else {
             params.append("weeks", weeks);
         }
-
-        // Construct the final redirect link
         const finalUrl = `${paymentPageBaseUrl}?${params.toString()}`;
-
-        // Redirect to your hosted payment page (Paystack popup will launch there)
         window.location.href = finalUrl;
     }
-
 
     function starrSetMessage(msg, isError = true) {
         GM_setValue('starr_auth_message', msg);
@@ -1049,7 +1046,7 @@
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'starr-expiry-redbar';
-            bar.style.position = 'relative'; // For absolute positioning of close button
+            bar.style.position = 'relative';
             document.documentElement.appendChild(bar);
             bar.innerHTML = `<div class="starr-redbar-text" style="flex-grow:1; text-align:center;"></div><button id="starr-redbar-subbtn" class="starr-std-button">RENEW</button>`;
             document.getElementById('starr-redbar-subbtn').addEventListener('click', async () => {
@@ -1135,7 +1132,7 @@
         const notificationEl = modal.querySelector('#starr-payment-notification');
 
         if (mode === 'debt' && debtAmount > 0) {
-            modal.dataset.weeks = "1"; // Auto-select the debt payment, backend will use the real debt amount
+            modal.dataset.weeks = "1";
         } else {
             modal.querySelectorAll('.starr-plan-btn').forEach(b => {
                 b.addEventListener('click', () => {
@@ -1166,10 +1163,8 @@
             const emailVal = `${localPart.split('+')[0]}+${Date.now()}@${domain}`;
 
             if (mode === 'debt' && debtAmount > 0) {
-                // For debt, call with the specific debtAmount and 0 weeks
                 await redirectToCheckout(coneId, 0, emailVal, notificationEl, debtAmount);
             } else {
-                // For subscriptions, use the original weeks logic
                 const weeks = Number(modal.dataset.weeks || 1);
                 await redirectToCheckout(coneId, weeks, emailVal, notificationEl);
             }
@@ -1208,10 +1203,7 @@
         }
     }
 
-    // 👇 PASTE THIS NEW, FASTER VERSION IN ITS PLACE
     async function checkConeStatusAndAct(coneId, forcePopupUpdate = false, isUserInitiated = false) {
-        // NEW: Define how long to cache the authorization status (in milliseconds)
-        // 7200000ms = 2 hours
         const CACHE_DURATION = 1000 * 60 * 60 * 3;
 
         if (!coneId) {
@@ -1222,7 +1214,6 @@
             return;
         }
 
-        // NEW: Check for a valid, non-expired cached status first
         const cachedStatus = await GM_getValue('starr_subscription_status', null);
         const lastCheckTime = await GM_getValue('starr_last_auth_check_time', 0);
 
@@ -1232,7 +1223,7 @@
             isAuthorized = (data.status === "active");
             accessDeniedPermanent = !isAuthorized;
             if (forcePopupUpdate) updatePopupUI(true);
-            return; // IMPORTANT: Skip the network request
+            return;
         }
 
         console.log("[StarrAuth] Cache expired or not found. Performing live network check...");
@@ -1248,7 +1239,6 @@
             if (response.status < 200 || response.status >= 300) throw new Error("API Error");
 
             const data = JSON.parse(response.responseText);
-            // NEW: Save the new status AND the current time to the cache
             await GM_setValue('starr_subscription_status', data);
             await GM_setValue('starr_last_auth_check_time', Date.now());
             console.log("[validate-cone] Fetched and cached new status:", data);
@@ -1293,6 +1283,7 @@
             }
         }
     }
+
     async function checkSubscriptionWarning() {
         if (!isAuthorized) {
             removeRedWarningBar();
@@ -1311,10 +1302,8 @@
         const tenMinutes = 10 * 60 * 1000;
 
         if (daysLeft === 1) {
-            // Persistent warning for 1 day left.
             ensureRedWarningBar(daysLeft, coneId, false);
         } else if (daysLeft === 2) {
-            // Dismissible warning, shows again after 10 mins.
             const dismissedAt = await GM_getValue('starr_warning_dismissed_at', 0);
             if (now - dismissedAt > tenMinutes) {
                 ensureRedWarningBar(daysLeft, coneId, true);
@@ -1322,7 +1311,6 @@
                 removeRedWarningBar();
             }
         } else {
-            // Not expiring soon.
             removeRedWarningBar();
         }
     }
@@ -1338,7 +1326,6 @@
         } catch (e) { console.error(e); }
     }
 
-    // Refresh subscription status from network periodically
     setInterval(async () => {
         try {
             if (isAuthorized) {
@@ -1346,7 +1333,7 @@
                 if (saved) await checkConeStatusAndAct(saved, false, false);
             }
         } catch (e) { console.error(e); }
-    }, 1000 * 60 * 60 * 2); // 2 hours
+    }, 1000 * 60 * 60 * 2);
 
     // ---- END STARR FRONTEND AUTH + PAY TRANSPLANT ----
 
@@ -1368,7 +1355,6 @@
         const allMessageElements = document.querySelectorAll('div.my-2');
         let lastAssistantMessageIndex = -1;
 
-        // Find the index of the very last message from Starr (the assistant)
         for (let i = allMessageElements.length - 1; i >= 0; i--) {
             if (!allMessageElements[i].classList.contains('flex-row-reverse')) {
                 lastAssistantMessageIndex = i;
@@ -1376,20 +1362,16 @@
             }
         }
 
-        // Get all messages that appeared AFTER Starr's last message
         const recentMessages = Array.from(allMessageElements).slice(lastAssistantMessageIndex + 1);
-
-        // From those recent messages, only pick the ones from the user and join their text
         const userMessages = recentMessages
             .filter(el => el.classList.contains('flex-row-reverse'))
             .map(el => {
                 const pElement = el.querySelector(ALL_CUSTOMER_MESSAGES_SELECTOR);
                 return pElement ? pElement.innerText.trim() : '';
             })
-            .filter(text => text) // Remove any empty messages
-            .join(' \n '); // Join them with a new line in between
+            .filter(text => text)
+            .join(' \n ');
 
-        // If we didn't find any new user messages, fall back to the old method just in case
         if (userMessages.length > 0) {
             return userMessages;
         } else {
@@ -1401,14 +1383,14 @@
     function detectAndNotifyPI(textToScan, source) {
         let foundPI = [];
         for (const [label, regex] of Object.entries(PI_DETECTION_CONFIG.regex)) {
-            regex.lastIndex = 0; // Reset regex state
+            regex.lastIndex = 0;
             let match;
             while ((match = regex.exec(textToScan)) !== null) {
                 const piValue = match[1] ? match[1] : match[0];
                 foundPI.push(`${label}: ${piValue}`);
             }
         }
-        if (foundPI.length === 0) return; // Nothing found, do nothing
+        if (foundPI.length === 0) return;
 
         const formattedPI = foundPI.join('\n');
         console.log(`PI Detected in ${source} Message:`, formattedPI);
@@ -1470,7 +1452,7 @@
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
                 action: 'summarize',
-                version: CURRENT_SCRIPT_VERSION, // <-- Add this
+                version: CURRENT_SCRIPT_VERSION,
                 apiKey,
                 textToSummarize: lastMessage,
                 preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
@@ -1513,7 +1495,7 @@
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
                 action: 'scan_pi',
-                version: CURRENT_SCRIPT_VERSION, // <-- Add this
+                version: CURRENT_SCRIPT_VERSION,
                 apiKey,
                 textToScan: text,
                 preferredSummarizer: await GM_getValue('starr_summarizer_engine', 'gift')
@@ -1549,6 +1531,20 @@
         });
     }
 
+    // --- NEW: Clean forbidden punctuation (em dash, etc.) ---
+    function cleanForbiddenPunctuation(text) {
+        if (typeof text !== 'string') return text;
+        // Replace em dash and en dash with "..."
+        let cleaned = text.replace(/[—–]/g, '...');
+        // Replace "!" with "."
+        cleaned = cleaned.replace(/!/g, '.');
+        // Replace ":" with "..."
+        cleaned = cleaned.replace(/:/g, '...');
+        // Replace ";" with "..."
+        cleaned = cleaned.replace(/;/g, '...');
+        return cleaned;
+    }
+
     async function fetchResponses(input, tone = 'plain', regenerationFocus = null) {
         if (!isAuthorized || idMismatchActive || accessDeniedPermanent) return;
 
@@ -1562,13 +1558,29 @@
         starrLoading.style.setProperty('display', 'flex', 'important');
         starrResponses.innerHTML = "";
 
+        // --- ROBUST IMAGE DETECTION (NEW) ---
         const lastUserMessageElement = Array.from(document.querySelectorAll('div.my-2.flex-row-reverse')).pop();
-        const imagesToProcess = lastUserMessageElement ? lastUserMessageElement.querySelectorAll('img[alt=""]') : [];
+        let imagesToProcess = [];
+        if (lastUserMessageElement) {
+            const allImages = lastUserMessageElement.querySelectorAll('img');
+            imagesToProcess = Array.from(allImages).filter(img => {
+                // Filter out small icons (likely not user uploads)
+                const width = img.width || img.clientWidth;
+                const height = img.height || img.clientHeight;
+                if (width && height && width <= 32 && height <= 32) return false;
+                // Filter out images with known icon/avatar paths
+                const src = img.src || '';
+                if (src.includes('/icons/') || src.includes('/avatars/') || src.includes('/thumbs/')) return false;
+                // Also filter out if the image is inside a thumbnail container (like the profile picture)
+                if (img.closest('.profile-picture') || img.closest('.user-avatar')) return false;
+                return true;
+            });
+        }
 
         // Handle images by converting them to data URIs and modifying the last message
         if (imagesToProcess.length > 0 && conversationHistory.length > 0) {
             try {
-                const dataUris = await Promise.all(Array.from(imagesToProcess).map(img => imageToDataURI(img.src)));
+                const dataUris = await Promise.all(imagesToProcess.map(img => imageToDataURI(img.src)));
                 const lastMessage = conversationHistory[conversationHistory.length - 1];
                 const textContent = (typeof lastMessage.content === 'string') ? lastMessage.content : (lastMessage.content.find(p => p.type === 'text')?.text || '');
                 const newContent = [{ type: 'text', text: textContent }];
@@ -1576,6 +1588,16 @@
                 conversationHistory[conversationHistory.length - 1].content = newContent;
             } catch (imageError) { console.error("Starr: Failed to process images.", imageError); }
         }
+
+        // --- NEW: Collect recent assistant messages for anti-repetition ---
+        const recentAssistantMessages = conversationHistory
+            .filter(msg => msg.role === 'assistant')
+            .slice(-5)
+            .map(msg => msg.content)
+            .join('\n- ');
+
+        // --- NEW: Get question style from settings ---
+        const questionStyle = await GM_getValue('starr_question_style', 'playful');
 
         const payload = {
             action: 'generate',
@@ -1588,7 +1610,9 @@
             tone: tone,
             isMultiResponseEnabled: await GM_getValue('starr_multi_response', false),
             hasImage: imagesToProcess.length > 0,
-            preferredEngine: await GM_getValue('starr_engine', 'zinat')
+            preferredEngine: await GM_getValue('starr_engine', 'zinat'),
+            recentAssistantMessages: recentAssistantMessages,   // NEW
+            questionStyle: questionStyle                         // NEW
         };
 
         const isStrictLength = await GM_getValue('starr_strict_length', false);
@@ -1598,7 +1622,7 @@
                 if (conversationHistory[i].role === 'user') {
                     lastUserMessages.unshift(conversationHistory[i].content);
                 } else {
-                    break; // Stop when we hit the last AI message
+                    break;
                 }
             }
             payload.userMessageLength = lastUserMessages.join(' ').length;
@@ -1613,7 +1637,7 @@
             url: STARR_BACKEND_URL,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify(payload),
-            timeout: 30000, // <-- Make sure you still have the timeout fix!
+            timeout: 30000,
             ontimeout: () => {
                 starrLoading.style.setProperty('display', 'none', 'important');
                 alert(`Starr Timeout Error: The server is taking too long to respond. E be like say e go sleep. Please try again in a moment.`);
@@ -1648,14 +1672,16 @@
 
                     replies.forEach(replyText => {
                         if (!replyText) return;
+                        // Replace "I love a man" with alternatives
                         const manWhoAlternatives = ["It's so hot when a man", "I'm really into a man", "It's a huge turn-on when a man"];
                         let cleanedReply = replyText.replace(/\bI love a man\b/gi, () => manWhoAlternatives[Math.floor(Math.random() * manWhoAlternatives.length)]);
+                        // --- NEW: Clean forbidden punctuation (em dash, !, :, ;) ---
+                        cleanedReply = cleanForbiddenPunctuation(cleanedReply);
                         const div = document.createElement("div");
                         div.className = "starr-reply";
                         div.textContent = cleanedReply;
                         starrResponses.appendChild(div);
                     });
-
 
                     if (GM_getValue('starr_voice_reply', true) && replies.length > 0 && replies[0]) {
                         try {
@@ -1682,26 +1708,13 @@
         });
     }
 
-    // --- NEW: Helper function for green flash and paste ---
-    function flashAndPaste(clickedReplyElement, text) {
-        clickedReplyElement.classList.remove('checking');
-        clickedReplyElement.classList.add('safe-flash');
-
-        setTimeout(() => {
-            pasteIntoSiteChat(text);
-            conversationHistory.push({ role: "assistant", content: text });
-            togglePopup(false);
-            clickedReplyElement.classList.remove('safe-flash');
-        }, 300);
-    }
-
     async function handleReplyClick(event) {
         if (!event.target.classList.contains('starr-reply') || event.target.classList.contains('checking') || event.target.classList.contains('safe-flash')) return;
 
         const clickedReplyElement = event.target;
         textUnderScrutiny = clickedReplyElement.textContent;
 
-        // --- START OF ANTI-PARROT GATE (NEW) ---
+        // --- ANTI-PARROT GATE ---
         const normalizeText = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
         const normScrutiny = normalizeText(textUnderScrutiny);
         const threshold = parseInt(await GM_getValue('starr_anti_parrot_threshold', 35), 10);
@@ -1711,7 +1724,6 @@
         let copiedElementDOM = null;
 
         if (normScrutiny.length > threshold) {
-            // Scrape the visual DOM directly to find matches, looking at the last 10 chat bubbles
             const chatBubbles = Array.from(document.querySelectorAll('div.my-2')).slice(-10);
 
             for (let bubble of chatBubbles) {
@@ -1722,7 +1734,6 @@
                 const normBubble = normalizeText(bubbleText);
 
                 if (normBubble.length > threshold) {
-                    // Match condition: It must be an exact match, or one fully encompasses the other
                     if (normBubble === normScrutiny || normScrutiny.includes(normBubble) || normBubble.includes(normScrutiny)) {
                         isCopyPaste = true;
                         copiedTextExact = bubbleText;
@@ -1734,12 +1745,10 @@
         }
 
         if (isCopyPaste) {
-            // Update modal with exact message
             violationReason.innerHTML = `<strong>Anti-Parrot Alert 🦜:</strong><br>Starr just tried to copy-paste a recent message! Regenerate this immediately to keep it fresh.<br><br><span style="color: #d32f2f; display: block; padding: 8px; background: rgba(255,0,0,0.1); border-radius: 5px; font-style: italic; border: 1px solid #ffcccc; margin-top: 10px;">"${copiedTextExact}"</span>`;
 
-            // Highlight it on the actual website DOM
             if (copiedElementDOM) {
-                removeCopiedHighlights(); // Clear old highlights
+                removeCopiedHighlights();
                 copiedElementDOM.classList.add('starr-copied-highlight');
                 copiedElementDOM.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
@@ -1748,7 +1757,7 @@
             violationSound.play().catch(e => console.error("Violation alarm playback failed:", e));
             return;
         }
-        // --- END OF ANTI-PARROT GATE ---
+        // --- END ANTI-PARROT GATE ---
 
         const apiKey = GM_getValue("starr_openrouter_api_key", null);
         const checkers = {
@@ -1756,8 +1765,20 @@
             llm: llmCheckerToggle.checked
         };
 
+        const flashAndPaste = () => {
+            clickedReplyElement.classList.remove('checking');
+            clickedReplyElement.classList.add('safe-flash');
+
+            setTimeout(() => {
+                pasteIntoSiteChat(textUnderScrutiny);
+                conversationHistory.push({ role: "assistant", content: textUnderScrutiny });
+                togglePopup(false);
+                clickedReplyElement.classList.remove('safe-flash');
+            }, 300);
+        };
+
         if (!checkers.regex && !checkers.llm) {
-            flashAndPaste(clickedReplyElement, textUnderScrutiny);
+            flashAndPaste();
             return;
         }
 
@@ -1768,7 +1789,7 @@
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
                 action: 'check_violation',
-                version: CURRENT_SCRIPT_VERSION, // <-- Add this
+                version: CURRENT_SCRIPT_VERSION,
                 apiKey,
                 textToScrutinize: textUnderScrutiny,
                 checkers,
@@ -1790,7 +1811,7 @@
                         violationWarningOverlay.style.display = 'flex';
                         violationSound.play().catch(e => console.error("Violation alarm playback failed:", e));
                     } else {
-                        flashAndPaste(clickedReplyElement, textUnderScrutiny);
+                        flashAndPaste();
                     }
                 } else {
                     clickedReplyElement.classList.remove('checking');
@@ -1835,7 +1856,7 @@
             lastProcessedMessageText = '';
             starrResponses.innerHTML = '';
             if (summaryContainer) summaryContainer.style.display = 'none';
-            removeCopiedHighlights(); // Ensure highlighting clears on new chat
+            removeCopiedHighlights();
         }
         const uiConeId = getLoggedInConeId();
         if (storedUserConeId && uiConeId && uiConeId !== storedUserConeId) {
@@ -1893,8 +1914,9 @@
     multiResponseToggle.addEventListener("change", () => GM_setValue('starr_multi_response', multiResponseToggle.checked));
     stylishButtonToggle.addEventListener("change", () => { button.classList.toggle("animated", stylishButtonToggle.checked); GM_setValue('starr_stylish_button', stylishButtonToggle.checked); });
     strictLengthToggle.addEventListener("change", () => GM_setValue('starr_strict_length', strictLengthToggle.checked));
-    // NEW: Anti-Parrot Threshold input listener
     antiParrotThresholdInput.addEventListener("change", () => GM_setValue('starr_anti_parrot_threshold', parseInt(antiParrotThresholdInput.value, 10)));
+    // NEW: Save question style
+    questionStyleSelect.addEventListener("change", () => GM_setValue('starr_question_style', questionStyleSelect.value));
     uiModeSelect.addEventListener('change', async () => { const selectedMode = uiModeSelect.value; document.body.classList.remove('ui-landscape', 'ui-portrait'); document.body.classList.add(selectedMode === 'portrait' ? 'ui-portrait' : 'ui-landscape'); updateButtonIcons(); await GM_setValue('starr_ui_mode', selectedMode); });
     themeButtons.forEach(b => b.addEventListener("click", (e) => { const theme = e.target.dataset.theme; autoThemeToggle.checked = false; isAutoThemeEnabled = false; GM_setValue('starr_auto_theme_enabled', false); applyTheme(theme); GM_setValue('starr_current_theme', theme); }));
     piScanButton.addEventListener('click', () => { const message = getUnansweredUserMessages(); if (message) scanMessageForPI(message); else alert("No message to scan."); });
@@ -1949,7 +1971,6 @@
         piLogCloseButton.textContent = msg;
         piLogCloseButton.disabled = true;
 
-        // THE FIX: Reset the main PI scan button
         const piScanButton = document.getElementById('starr-pi-scan-button');
         if (piScanButton) {
             piScanButton.textContent = '♻️';
@@ -1965,7 +1986,6 @@
 
     piCloseButton.addEventListener('click', () => {
         piEditorPopup.style.display = 'none';
-        // THE FIX: Reset the main PI scan button
         const piScanButton = document.getElementById('starr-pi-scan-button');
         if (piScanButton) {
             piScanButton.textContent = '♻️';
@@ -2004,8 +2024,10 @@
         isTimerWarningEnabled = timerWarningToggle.checked;
         multiResponseToggle.checked = await GM_getValue('starr_multi_response', false);
         strictLengthToggle.checked = await GM_getValue('starr_strict_length', false);
-        // NEW: Load Anti-Parrot Threshold
         antiParrotThresholdInput.value = await GM_getValue('starr_anti_parrot_threshold', 35);
+        // NEW: Load question style
+        const savedQuestionStyle = await GM_getValue('starr_question_style', 'playful');
+        questionStyleSelect.value = savedQuestionStyle;
         voiceReplyToggle.checked = await GM_getValue('starr_voice_reply', true);
         regexCheckerToggle.checked = await GM_getValue('starr_regex_checker_enabled', true);
         llmCheckerToggle.checked = await GM_getValue('starr_llm_checker_enabled', false);
@@ -2024,7 +2046,6 @@
     document.addEventListener('keydown', (e) => { const isCtrl = e.ctrlKey || e.metaKey; if (violationWarningOverlay.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); removeCopiedHighlights(); violationWarningOverlay.style.display = 'none'; } else if (e.key === 'Enter' && !isCtrl) { e.preventDefault(); violationEditButton.click(); } else if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); violationRegenerateButton.click(); } else if (isCtrl && e.key === 'Enter') { e.preventDefault(); violationElVioButton.click(); } return; } if (piEditorPopup.style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); piEditorPopup.style.display = 'none'; } if (isCtrl && e.key === 'Tab') { const piModal = document.getElementById('starr-pi-editor-popup'); if (piModal) piModal.classList.toggle('modal-minimized'); e.preventDefault(); } return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!popup.classList.contains('visible')) button.click(); else document.getElementById('starr-close').click(); return; } if (isCtrl && e.key.toLowerCase() === 'm') { e.preventDefault(); togglePopup(!popup.classList.contains('visible')); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'm') { const violationModal = document.getElementById('starr-violation-warning'); if (violationModal) violationModal.classList.toggle('modal-minimized'); } if (e.key === 'Tab' && popup.classList.contains('visible')) { e.preventDefault(); piScanButton.click(); return; } if (isCtrl && e.key.toLowerCase() === 'q') { e.preventDefault(); forceSummary(); return; } if (e.key.toLowerCase() === 't') { const activeEl = document.activeElement; if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) return; e.preventDefault(); starrSettingsButton.click(); return; } if (!popup.classList.contains('visible')) return; if (isCtrl && e.key.toLowerCase() === 'r') { e.preventDefault(); document.getElementById('starr-regenerate').click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); const spicyButton = document.querySelector('.spicy-regen-main-button'); if (spicyButton) spicyButton.click(); return; } if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('starr-force-key').click(); return; } if (e.key === 'Escape') { e.preventDefault(); document.getElementById('starr-close').click(); return; } const replies = starrResponses.querySelectorAll('.starr-reply'); if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (replies.length === 0) return; if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) replies[selectedReplyIndex].classList.remove('selected-reply'); if (e.key === 'ArrowDown') selectedReplyIndex = (selectedReplyIndex + 1) % replies.length; else selectedReplyIndex = (selectedReplyIndex - 1 + replies.length) % replies.length; const newSelectedReply = replies[selectedReplyIndex]; newSelectedReply.classList.add('selected-reply'); newSelectedReply.scrollIntoView({ block: 'nearest' }); return; } if (e.key === 'Enter') { if (selectedReplyIndex > -1 && replies[selectedReplyIndex]) { e.preventDefault(); replies[selectedReplyIndex].click(); } else if (document.activeElement === starrInput && (isCtrl || !e.shiftKey)) { e.preventDefault(); document.getElementById('starr-send').click(); } } });
     function togglePopup(show) {
         if (show) {
-            // To show: first make it a flex container, then trigger the animation.
             popup.style.setProperty('display', 'flex', 'important');
             requestAnimationFrame(() => {
                 popup.classList.add('visible');
@@ -2034,11 +2055,10 @@
                 }
             });
         } else {
-            // To hide: trigger the animation, then hide it completely after the animation finishes.
             popup.classList.remove('visible');
             setTimeout(() => {
                 popup.style.setProperty('display', 'none', 'important');
-            }, 300); // 300ms matches the CSS transition time
+            }, 300);
         }
     }
     async function init() {
