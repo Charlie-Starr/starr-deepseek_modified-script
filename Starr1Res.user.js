@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Starr (User API Key Edition) - Abacha Edition (Fixed)
 // @namespace     http://tampermonkey.net/
-// @version       9.3.2
+// @version       9.3.3
 // @description   Starr: A real human woman. Seductive, witty, naughty, cheeky, flirty. Now powered by your own OpenRouter API Key and a subscription backend.
 // @match         *://*/*
 // @downloadURL   https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js
@@ -76,7 +76,7 @@
 
     // --- START: VERSION CHECK & UPDATE LOCK LOGIC ---
 
-    const CURRENT_SCRIPT_VERSION = '9.3.2';
+    const CURRENT_SCRIPT_VERSION = '9.3.3';
     const SCRIPT_URL = 'https://charlie-starr.github.io/starr-deepseek_modified-script/Starr1Res.user.js';
 
     /**
@@ -157,8 +157,6 @@
     }
 
     // --- END: VERSION CHECK & UPDATE LOCK LOGIC ---
-
-    // --- All CSS, UI elements, and other script logic remains below ---
     const style = document.createElement("style");
     style.textContent = `
         /* Minimize button for modals */
@@ -629,7 +627,7 @@
         }
     }
 
-    // Add minimize button to PI Scan modal
+    // Minimize button to PI Scan modal
     function addPiScanMinimizeButton() {
         const piModal = document.getElementById('starr-pi-editor-popup');
         if (piModal && !piModal.querySelector('.modal-minimize-btn')) {
@@ -1558,24 +1556,8 @@
         starrLoading.style.setProperty('display', 'flex', 'important');
         starrResponses.innerHTML = "";
 
-        // --- ROBUST IMAGE DETECTION (NEW) ---
         const lastUserMessageElement = Array.from(document.querySelectorAll('div.my-2.flex-row-reverse')).pop();
-        let imagesToProcess = [];
-        if (lastUserMessageElement) {
-            const allImages = lastUserMessageElement.querySelectorAll('img');
-            imagesToProcess = Array.from(allImages).filter(img => {
-                // Filter out small icons (likely not user uploads)
-                const width = img.width || img.clientWidth;
-                const height = img.height || img.clientHeight;
-                if (width && height && width <= 32 && height <= 32) return false;
-                // Filter out images with known icon/avatar paths
-                const src = img.src || '';
-                if (src.includes('/icons/') || src.includes('/avatars/') || src.includes('/thumbs/')) return false;
-                // Also filter out if the image is inside a thumbnail container (like the profile picture)
-                if (img.closest('.profile-picture') || img.closest('.user-avatar')) return false;
-                return true;
-            });
-        }
+const imagesToProcess = lastUserMessageElement ? lastUserMessageElement.querySelectorAll('img[alt=""]') : [];
 
         // Handle images by converting them to data URIs and modifying the last message
         if (imagesToProcess.length > 0 && conversationHistory.length > 0) {
@@ -1611,8 +1593,8 @@
             isMultiResponseEnabled: await GM_getValue('starr_multi_response', false),
             hasImage: imagesToProcess.length > 0,
             preferredEngine: await GM_getValue('starr_engine', 'zinat'),
-            recentAssistantMessages: recentAssistantMessages,   // NEW
-            questionStyle: questionStyle                         // NEW
+            recentAssistantMessages: recentAssistantMessages,
+            questionStyle: questionStyle
         };
 
         const isStrictLength = await GM_getValue('starr_strict_length', false);
